@@ -65,6 +65,12 @@
 #define	gadget_is_lh7a40x(g)	0
 #endif
 
+#ifdef CONFIG_USB_GADGET_LPC313x
+#define	gadget_is_lpc313x(g)	!strcmp("lpc313x_udc", (g)->name)
+#else
+#define	gadget_is_lpc313x(g)	0
+#endif
+
 /* handhelds.org tree (?) */
 #ifdef CONFIG_USB_GADGET_MQ11XX
 #define	gadget_is_mq11xx(g)	!strcmp("mq11xx_udc", (g)->name)
@@ -225,6 +231,8 @@ static inline int usb_gadget_controller_number(struct usb_gadget *gadget)
 		return 0x21;
 	else if (gadget_is_fsl_qe(gadget))
 		return 0x22;
+	else if (gadget_is_lpc313x(gadget))
+		return 0x23;
 	return -ENOENT;
 }
 

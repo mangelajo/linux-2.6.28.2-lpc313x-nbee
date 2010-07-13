@@ -549,6 +549,15 @@ config ARCH_MSM
 	  interface to the ARM9 modem processor which runs the baseband stack
 	  and controls some vital subsystems (clock and power control, etc).
 
+config ARCH_LPC313X
+	bool "NXP LPC313X series"
+	select CPU_ARM926T
+	help
+	  Say Y here for systems based on one of the NXP LPC313x & LPC315x
+	  System on a Chip processors.  These CPUs include an ARM926EJS
+	  core with a wide array of integrated devices for
+	  hand-held and low-power applications.
+
 endchoice
 
 source "arch/arm/mach-clps711x/Kconfig"
@@ -626,6 +635,8 @@ source "arch/arm/mach-davinci/Kconfig"
 source "arch/arm/mach-ks8695/Kconfig"
 
 source "arch/arm/mach-msm/Kconfig"
+
+source "arch/arm/mach-lpc313x/Kconfig"
 
 # Definitions to make life easier
 config ARCH_ACORN
@@ -876,7 +887,7 @@ config LEDS
 		   ARCH_OMAP || ARCH_P720T || ARCH_PXA_IDP || \
 		   ARCH_SA1100 || ARCH_SHARK || ARCH_VERSATILE || \
 		   ARCH_AT91 || ARCH_DAVINCI || \
-		   ARCH_KS8695 || MACH_RD88F5182
+		   ARCH_KS8695 || MACH_RD88F5182 || ARCH_LPC313X
 	help
 	  If you say Y here, the LEDs on your machine will be used
 	  to provide useful information about your current system status.
@@ -891,7 +902,7 @@ config LEDS
 config LEDS_TIMER
 	bool "Timer LED" if (!ARCH_CDB89712 && !ARCH_OMAP) || \
 			    OMAP_OSK_MISTRAL || MACH_OMAP_H2 \
-			    || MACH_OMAP_PERSEUS2
+			    || MACH_OMAP_PERSEUS2 || ARCH_LPC313X
 	depends on LEDS
 	depends on !GENERIC_CLOCKEVENTS
 	default y if ARCH_EBSA110
@@ -910,7 +921,7 @@ config LEDS_CPU
 	bool "CPU usage LED" if (!ARCH_CDB89712 && !ARCH_EBSA110 && \
 			!ARCH_OMAP) \
 			|| OMAP_OSK_MISTRAL || MACH_OMAP_H2 \
-			|| MACH_OMAP_PERSEUS2
+			|| MACH_OMAP_PERSEUS2 || ARCH_LPC313X
 	depends on LEDS
 	help
 	  If you say Y here, the red LED will be used to give a good real

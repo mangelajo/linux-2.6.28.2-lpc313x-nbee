@@ -38,6 +38,7 @@
 #include <linux/platform_device.h>
 #include <linux/fsl_devices.h>
 #include <linux/dmapool.h>
+#include <linux/delay.h>
 
 #include <asm/byteorder.h>
 #include <asm/io.h>
@@ -57,7 +58,9 @@ static const char driver_name[] = "fsl-usb2-udc";
 static const char driver_desc[] = DRIVER_DESC;
 
 static struct usb_dr_device *dr_regs;
+#ifndef CONFIG_ARCH_MXC
 static struct usb_sys_interface *usb_sys_regs;
+#endif
 
 /* it is initialized in probe()  */
 static struct fsl_udc *udc_controller = NULL;
@@ -72,6 +75,8 @@ fsl_ep0_desc = {
 };
 
 static void fsl_ep_fifo_flush(struct usb_ep *_ep);
+static int fsl_udc_suspend(struct platform_device *pdev, pm_message_t state);
+static int fsl_udc_resume(struct platform_device *pdev);
 
 #ifdef CONFIG_PPC32
 #define fsl_readl(addr)		in_le32(addr)
@@ -237,9 +242,11 @@ static int dr_controller_setup(struct fsl_udc *udc)
 	fsl_writel(portctrl, &dr_regs->portsc1);
 
 	/* Config control enable i/o output, cpu endian register */
+#ifndef CONFIG_ARCH_MXC
 	ctrl = __raw_readl(&usb_sys_regs->control);
 	ctrl |= USB_CTRL_IOENB;
 	__raw_writel(ctrl, &usb_sys_regs->control);
+#endif
 
 #if defined(CONFIG_PPC32) && !defined(CONFIG_NOT_COHERENT_CACHE)
 	/* Turn on cache snooping hardware, since some PowerPC platforms
@@ -286,6 +293,17 @@ static void dr_controller_run(struct fsl_udc *udc)
 static void dr_controller_stop(struct fsl_udc *udc)
 {
 	unsigned int tmp;
+
+	/* if we're in OTG mode, and the Host is currently using the port,
+	 * stop now and don't rip the controller out from under the
+	 * ehci driver
+	 */
+	if (gadget_is_otg(&udc->gadget)) {
+		if (!(dr_regs->otgsc & OTGSC_STS_USB_ID)) {
+			VDBG("udc: Leaving early\n");
+			return;
+		}
+	}
 
 	/* disable all INTR */
 	fsl_writel(0, &dr_regs->usbintr);
@@ -405,6 +423,8 @@ static void struct_ep_qh_setup(struct fsl_udc *udc, unsigned char ep_num,
 	if (zlt)
 		tmp |= EP_QUEUE_HEAD_ZLT_SEL;
 	p_QH->max_pkt_length = cpu_to_le32(tmp);
+	p_QH->next_dtd_ptr = 1;
+	p_QH->size_ioc_int_sts = 0;
 
 	return;
 }
@@ -1789,17 +1809,36 @@ int usb_gadget_register_driver(struct usb_gadget_driver *driver)
 		goto out;
 	}
 
-	/* Enable DR IRQ reg and Set usbcmd reg  Run bit */
-	dr_controller_run(udc_controller);
-	udc_controller->usb_state = USB_STATE_ATTACHED;
-	udc_controller->ep0_state = WAIT_FOR_SETUP;
-	udc_controller->ep0_dir = 0;
+	if (udc_controller->transceiver) {
+		VDBG("udc: suspend udc for OTG auto detect \n");
+		udc_controller->stopped = 0;
+		/* Export udc suspend/resume call to OTG */
+		//udc_controller->gadget.dev.parent->driver->suspend = fsl_udc_suspend;
+		//udc_controller->gadget.dev.parent->driver->resume = fsl_udc_resume;
+
+		/* connect to bus through transceiver */
+		retval = otg_set_peripheral(udc_controller->transceiver, &udc_controller->gadget);
+		if (retval < 0) {
+			VDBG("udc: can't bind to transceiver\n");
+			driver->unbind(&udc_controller->gadget);
+			udc_controller->gadget.dev.driver = 0;
+			udc_controller->driver = 0;
+			return retval;
+		}
+	} else {
+		/* Enable DR IRQ reg and Set usbcmd reg  Run bit */
+		dr_controller_run(udc_controller);
+		udc_controller->usb_state = USB_STATE_ATTACHED;
+		udc_controller->ep0_state = WAIT_FOR_SETUP;
+		udc_controller->ep0_dir = 0;
+	}
 	printk(KERN_INFO "%s: bind to driver %s\n",
 			udc_controller->gadget.name, driver->driver.name);
 
 out:
 	if (retval)
-		printk("gadget driver register failed %d\n", retval);
+		printk(KERN_WARNING "gadget driver register failed %d\n",
+		       retval);
 	return retval;
 }
 EXPORT_SYMBOL(usb_gadget_register_driver);
@@ -1844,7 +1883,8 @@ int usb_gadget_unregister_driver(struct usb_gadget_driver *driver)
 	udc_controller->gadget.dev.driver = NULL;
 	udc_controller->driver = NULL;
 
-	printk("unregistered gadget driver '%s'\n", driver->driver.name);
+	printk(KERN_WARNING "unregistered gadget driver '%s'\n",
+	       driver->driver.name);
 	return 0;
 }
 EXPORT_SYMBOL(usb_gadget_unregister_driver);
@@ -2038,6 +2078,7 @@ static int fsl_proc_read(char *page, char **start, off_t off, int count,
 	size -= t;
 	next += t;
 
+#ifndef CONFIG_ARCH_MXC
 	tmp_reg = usb_sys_regs->snoop1;
 	t = scnprintf(next, size, "Snoop1 Reg : = [0x%x]\n\n", tmp_reg);
 	size -= t;
@@ -2048,6 +2089,7 @@ static int fsl_proc_read(char *page, char **start, off_t off, int count,
 			tmp_reg);
 	size -= t;
 	next += t;
+#endif
 
 	/* ------fsl_udc, fsl_ep, fsl_request structure information ----- */
 	ep = &udc->eps[0];
@@ -2258,14 +2300,21 @@ static int __init fsl_udc_probe(struct platform_device *pdev)
 		goto err_kfree;
 	}
 
-	dr_regs = ioremap(res->start, res->end - res->start + 1);
+	dr_regs = ioremap(res->start, resource_size(res));
 	if (!dr_regs) {
 		ret = -ENOMEM;
 		goto err_release_mem_region;
 	}
 
+#ifndef CONFIG_ARCH_MXC
 	usb_sys_regs = (struct usb_sys_interface *)
 			((u32)dr_regs + USB_DR_SYS_OFFSET);
+#endif
+
+	/* Initialize USB clocks */
+	ret = fsl_udc_clk_init(pdev);
+	if (ret < 0)
+		goto err_iounmap_noclk;
 
 	/* Read Device Controller Capability Parameters register */
 	dccparams = fsl_readl(&dr_regs->dccparams);
@@ -2277,6 +2326,11 @@ static int __init fsl_udc_probe(struct platform_device *pdev)
 	/* Get max device endpoints */
 	/* DEN is bidirectional ep number, max_ep doubles the number */
 	udc_controller->max_ep = (dccparams & DCCPARAMS_DEN_MASK) * 2;
+
+#ifdef CONFIG_USB_OTG
+	udc_controller->transceiver = otg_get_transceiver();
+	VDBG("udc: otg_get_transceiver returns 0x%p", udc_controller->transceiver);
+#endif
 
 	udc_controller->irq = platform_get_irq(pdev, 0);
 	if (!udc_controller->irq) {
@@ -2301,7 +2355,13 @@ static int __init fsl_udc_probe(struct platform_device *pdev)
 
 	/* initialize usb hw reg except for regs for EP,
 	 * leave usbintr reg untouched */
+	if (!udc_controller->transceiver) {
 	dr_controller_setup(udc_controller);
+	} else {
+		udc_controller->gadget.is_otg = 1;
+	}
+
+	fsl_udc_clk_finalize(pdev);
 
 	/* Setup gadget structure */
 	udc_controller->gadget.ops = &fsl_gadget_ops;
@@ -2357,6 +2417,8 @@ err_unregister:
 err_free_irq:
 	free_irq(udc_controller->irq, udc_controller);
 err_iounmap:
+	fsl_udc_clk_release();
+err_iounmap_noclk:
 	iounmap(dr_regs);
 err_release_mem_region:
 	release_mem_region(res->start, res->end - res->start + 1);
@@ -2379,6 +2441,14 @@ static int __exit fsl_udc_remove(struct platform_device *pdev)
 		return -ENODEV;
 	udc_controller->done = &done;
 
+	fsl_udc_clk_release();
+
+#ifdef CONFIG_USB_OTG
+	if (udc_controller->transceiver) {
+		otg_put_transceiver(udc_controller->transceiver);
+		udc_controller->transceiver = 0;
+	}
+#endif
 	/* DR has been stopped in usb_gadget_unregister_driver() */
 	remove_proc_file();
 
@@ -2452,7 +2522,7 @@ module_init(udc_init);
 static void __exit udc_exit(void)
 {
 	platform_driver_unregister(&udc_driver);
-	printk("%s unregistered\n", driver_desc);
+	printk(KERN_WARNING "%s unregistered\n", driver_desc);
 }
 
 module_exit(udc_exit);

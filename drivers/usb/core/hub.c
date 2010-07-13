@@ -1143,7 +1143,7 @@ static int hub_probe(struct usb_interface *intf, const struct usb_device_id *id)
 
 #ifdef	CONFIG_USB_OTG_BLACKLIST_HUB
 	if (hdev->parent) {
-		dev_warn(&intf->dev, "ignoring external hub\n");
+		dev_warn(&intf->dev, "External hub not Supported\n");
 		return -ENODEV;
 	}
 #endif
@@ -1489,7 +1489,7 @@ static void announce_device(struct usb_device *udev)
 static inline void announce_device(struct usb_device *udev) { }
 #endif
 
-#ifdef	CONFIG_USB_OTG
+#ifdef	CONFIG_USB_OTG_WHITELIST
 #include "otg_whitelist.h"
 #endif
 
@@ -1563,8 +1563,16 @@ static int usb_configure_device_otg(struct usb_device *udev)
 		err = -ENOTSUPP;
 		goto fail;
 	}
-fail:
+#elif defined(CONFIG_USB_OTG_WHITELIST)
+	if (!is_targeted(udev)) {
+
+		dev_warn(&udev->dev, "This device is not Supported\n");
+		err = -ENOTSUPP;
+		goto fail;
+	}
+
 #endif
+fail:
 	return err;
 }
 

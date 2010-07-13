@@ -21,6 +21,7 @@ static struct usb_device_id whitelist_table [] = {
 /* hubs are optional in OTG, but very handy ... */
 { USB_DEVICE_INFO(USB_CLASS_HUB, 0, 0), },
 { USB_DEVICE_INFO(USB_CLASS_HUB, 0, 1), },
+{ USB_DEVICE_INFO(USB_CLASS_HUB, 0, 2), },
 
 #ifdef	CONFIG_USB_PRINTER		/* ignoring nonstatic linkage! */
 /* FIXME actually, printers are NOT supposed to use device classes;
@@ -42,7 +43,6 @@ static struct usb_device_id whitelist_table [] = {
 /* gadget zero, for testing */
 { USB_DEVICE(0x0525, 0xa4a0), },
 #endif
-
 { }	/* Terminating entry */
 };
 
@@ -50,14 +50,22 @@ static int is_targeted(struct usb_device *dev)
 {
 	struct usb_device_id	*id = whitelist_table;
 
-	/* possible in developer configs only! */
+#if defined(CONFIG_USB_OTG)
+  /* possible in developer configs only! */
 	if (!dev->bus->otg_port)
 		return 1;
-
-	/* HNP test device is _never_ targeted (see OTG spec 6.6.6) */
+	
+  /* HNP test device is _never_ targeted (see OTG spec 6.6.6) */
 	if ((le16_to_cpu(dev->descriptor.idVendor) == 0x1a0a &&
 	     le16_to_cpu(dev->descriptor.idProduct) == 0xbadd))
 		return 0;
+#endif
+
+#if defined(CONFIG_USB_EHCI_EHSET)
+	if ((le16_to_cpu(dev->descriptor.idVendor) == 0x1a0a))
+		return 1;
+
+#endif
 
 	/* NOTE: can't use usb_match_id() since interface caches
 	 * aren't set up yet. this is cut/paste from that code.

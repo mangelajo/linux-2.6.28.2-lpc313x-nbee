@@ -433,7 +433,7 @@ static int uda1380_pcm_prepare(struct snd_pcm_substream *substream)
 	}
 
 	/* FIXME enable DAC_CLK */
-	uda1380_write(codec, UDA1380_CLK, clk | R00_DAC_CLK);
+	uda1380_write(codec, UDA1380_CLK, clk);
 
 	return 0;
 }

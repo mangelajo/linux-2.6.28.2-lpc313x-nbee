@@ -20,10 +20,12 @@
 #include <linux/platform_device.h>
 #include <linux/i2c-pnx.h>
 #include <mach/hardware.h>
+#include <mach/i2c.h>
 #include <asm/irq.h>
 #include <asm/uaccess.h>
+#include <asm/io.h>
 
-#define I2C_PNX_TIMEOUT		10 /* msec */
+#define I2C_PNX_TIMEOUT		100 /* msec */
 #define I2C_PNX_SPEED_KHZ	100
 #define I2C_PNX_REGION_SIZE	0x100
 #define PNX_DEFAULT_FREQ	13 /* MHz */
@@ -170,11 +172,9 @@ static int i2c_pnx_master_xmit(struct i2c_adapter *adap)
 		/* We still have something to talk about... */
 		val = *alg_data->mif.buf++;
 
-		if (alg_data->mif.len == 1) {
+		/* last byte of a message */
+		if ((alg_data->mif.len == 1) && alg_data->last)
 			val |= stop_bit;
-			if (!alg_data->last)
-				val |= start_bit;
-		}
 
 		alg_data->mif.len--;
 		iowrite32(val, I2C_REG_TX(alg_data));
@@ -249,9 +249,6 @@ static int i2c_pnx_master_rcv(struct i2c_adapter *adap)
 		if (alg_data->mif.len == 1) {
 			/* Last byte, do not acknowledge next rcv. */
 			val |= stop_bit;
-			if (!alg_data->last)
-				val |= start_bit;
-
 			/*
 			 * Enable interrupt RFDAIE (data in Rx fifo),
 			 * and disable DRMIE (need data for Tx)
@@ -632,7 +629,9 @@ static int __devinit i2c_pnx_probe(struct platform_device *pdev)
 
 	/* Register this adapter with the I2C subsystem */
 	i2c_pnx->adapter->dev.parent = &pdev->dev;
-	ret = i2c_add_adapter(i2c_pnx->adapter);
+  /* use the new i2c_add_numbered_adapter routine for proper bus numbers */
+  i2c_pnx->adapter->nr = pdev->id;
+	ret = i2c_add_numbered_adapter(i2c_pnx->adapter);
 	if (ret < 0) {
 		dev_err(&pdev->dev, "I2C: Failed to add bus\n");
 		goto out_irq;

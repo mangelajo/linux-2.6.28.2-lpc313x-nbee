@@ -419,5 +419,11 @@ config MTD_NAND_SH_FLCTL
 	help
 	  Several Renesas SuperH CPU has FLCTL. This option enables support
 	  for NAND Flash using FLCTL. This driver support SH7723.
+	  
+config MTD_NAND_LPC313X
+	tristate "Support for NAND Controller on NXP LPC313x"
+	depends on ARCH_LPC313X
+	help
+	  This enables the NAND flash controller on the LPC313x
 
 endif # MTD_NAND
