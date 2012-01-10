@@ -94,7 +94,7 @@ int dma_prog_channel (unsigned int chn, dma_setup_t *dma_setup)
 	if ((chn >= DMA_MAX_CHANNELS) || !dma_channels[chn].name ||
 		dma_valid_config(dma_setup) )
 		return -EINVAL;
-	
+
 	DMACH_SRC_ADDR(chn) = dma_setup->src_address;
 	DMACH_DST_ADDR(chn) = dma_setup->dest_address;
 	DMACH_LEN(chn) = dma_setup->trans_length;
@@ -117,9 +117,9 @@ int dma_request_channel (char *name, dma_cb_t cb, void *data)
 
 	memset(&dma_setup, 0, sizeof(dma_setup));
 
-	for (chn = 0, mask = 1; chn < DMA_MAX_CHANNELS; chn++) 
+	for (chn = 0, mask = 1; chn < DMA_MAX_CHANNELS; chn++)
 	{
-		if (!dma_channels[chn].name) 
+		if (!dma_channels[chn].name)
 		{
 			dma_increment_usage();
 			dma_channels[chn].name = name;
@@ -150,7 +150,7 @@ int dma_request_specific_channel (int chn, char *name, void (*cb)(int, dma_irq_t
 	if (chn >= DMA_MAX_CHANNELS || !name)
 		return -EINVAL;
 
-	if (dma_channels[chn].name) 
+	if (dma_channels[chn].name)
 		return -EBUSY;
 
 	lpc313x_dma_lock();
@@ -243,7 +243,7 @@ int dma_release_channel (unsigned int chn)
 	}
 
 	lpc313x_dma_lock();
-	
+
 	local_irq_save(flags);
 
 	/* Otherwise an unexpected interrupt can occur when the channel is reallocated for another purpose */
@@ -260,7 +260,7 @@ int dma_release_channel (unsigned int chn)
 
 	lpc313x_dma_unlock();
 	dma_decrement_usage();
-	
+
 	return 0;
 }
 
@@ -277,20 +277,20 @@ static irqreturn_t dma_irq_handler (int irq, void *dev_id)
 		if (dma_irq_status & mask) {
 			DMACH_IRQ_STATUS = mask;
 			if (dma_channels[chn].callback_handler)
-				(dma_channels[chn].callback_handler) 
+				(dma_channels[chn].callback_handler)
 					(chn, DMA_IRQ_FINISHED, dma_channels[chn].data);
 		}
 		mask = mask << 1;
 		if (dma_irq_status & mask) {
 			DMACH_IRQ_STATUS = mask;
 			if (dma_channels[chn].callback_handler)
-				(dma_channels[chn].callback_handler) 
+				(dma_channels[chn].callback_handler)
 					(chn, DMA_IRQ_HALFWAY, dma_channels[chn].data);
 		}
 		mask = mask << 1;
 	}
 
-	if (dma_irq_status & DMA_IRQS_SOFT) { /* Soft int */ 
+	if (dma_irq_status & DMA_IRQS_SOFT) { /* Soft int */
 		DMACH_IRQ_STATUS = DMA_IRQS_SOFT;
 		for (chn = 0; chn < DMA_MAX_CHANNELS; chn++) {
 			if (sg_higher_channel[chn] && softirqmask[chn] &&
@@ -306,7 +306,7 @@ static irqreturn_t dma_irq_handler (int irq, void *dev_id)
 		DMACH_IRQ_STATUS = DMA_IRQS_ABORT;
 		for (chn = 0; chn < DMA_MAX_CHANNELS; chn++)
 			if (dma_channels[chn].callback_handler)
-				(dma_channels[chn].callback_handler) 
+				(dma_channels[chn].callback_handler)
 					(chn, DMA_IRQ_DMAABORT, dma_channels[chn].data);
 	}
 
@@ -353,7 +353,8 @@ int dma_current_state (unsigned int   chn,
 	return 0;
 }
 
-int dma_request_sg_channel (char *name, dma_cb_t cb, void *data, int usesoftirq)
+int dma_request_sg_channel (char *name, dma_cb_t cb, void *data,
+		dma_cb_t cb1, void *data1, int usesoftirq)
 {
 	unsigned int chn;
 	unsigned long flags;
@@ -367,7 +368,7 @@ int dma_request_sg_channel (char *name, dma_cb_t cb, void *data, int usesoftirq)
 
 	lpc313x_dma_lock();
 
-	for (chn = 0; chn < DMA_MAX_CHANNELS - 1; chn++) 
+	for (chn = 0; chn < DMA_MAX_CHANNELS - 1; chn++)
 		if (!dma_channels[chn].name && !dma_channels[chn + 1].name) {
 			sg_higher_channel[chn] = chn + 1;
 			break;
@@ -388,6 +389,10 @@ int dma_request_sg_channel (char *name, dma_cb_t cb, void *data, int usesoftirq)
 		dma_channels[sg_higher_channel[chn]].callback_handler = cb;
 		dma_channels[sg_higher_channel[chn]].data = data;
 	}
+	if(cb1) {
+		dma_channels[sg_higher_channel[chn] - 1].callback_handler = cb1;
+		dma_channels[sg_higher_channel[chn] - 1].data = data1;
+	}
 	dma_prog_channel (sg_higher_channel[chn], &dma_setup);
 
 	if (usesoftirq) {
@@ -404,7 +409,8 @@ int dma_request_sg_channel (char *name, dma_cb_t cb, void *data, int usesoftirq)
 	return sg_higher_channel[chn];
 }
 
-int dma_request_specific_sg_channel (int chn, char *name, dma_cb_t cb, void *data, int usesoftirq)
+int dma_request_specific_sg_channel (int chn, char *name, dma_cb_t cb,
+		void *data, dma_cb_t cb1, void *data1, int usesoftirq)
 {
 	unsigned long flags;
 	dma_setup_t  dma_setup;
@@ -419,7 +425,7 @@ int dma_request_specific_sg_channel (int chn, char *name, dma_cb_t cb, void *dat
 		return -EBUSY;
 
 	lpc313x_dma_lock();
-	
+
 	sg_higher_channel[chn] = chn;
 
 	memset(&dma_setup, 0, sizeof(dma_setup));
@@ -431,6 +437,10 @@ int dma_request_specific_sg_channel (int chn, char *name, dma_cb_t cb, void *dat
 	if (cb) {
 		dma_channels[sg_higher_channel[chn]].callback_handler = cb;
 		dma_channels[sg_higher_channel[chn]].data = data;
+	}
+	if(cb1) {
+		dma_channels[sg_higher_channel[chn] - 1].callback_handler = cb1;
+		dma_channels[sg_higher_channel[chn] - 1].data = data1;
 	}
 	dma_prog_channel (sg_higher_channel[chn], &dma_setup);
 
@@ -507,16 +517,16 @@ int dma_release_sg_channel (unsigned int chn)
 		DMACH_IRQ_MASK = dma_irq_mask;
 		local_irq_restore(flags);
 	}
-	
+
 	dma_channels[chn].name = NULL;
 	dma_channels[chn].callback_handler = NULL;
 	dma_channels[chn].data = NULL;
-	
+
 	chn--;
 	dma_channels[chn].name = NULL;
 	dma_channels[chn].callback_handler = NULL;
 	dma_channels[chn].data = NULL;
-	
+
 	sg_higher_channel[chn] = 0;
 
 	lpc313x_dma_unlock();

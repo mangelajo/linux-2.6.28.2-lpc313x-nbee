@@ -202,7 +202,7 @@ static int lpc313x_pcm_hw_free(struct snd_pcm_substream *substream)
 		dma_release_sg_channel(prtd->dmach);
 
 		/* Return the linked list area */
-		dma_free_coherent(substream->pcm->card->dev, 
+		dma_free_coherent(substream->pcm->card->dev,
 			DMA_LIST_SIZE, prtd->p_sg_cpu, (dma_addr_t)prtd->p_sg_dma);
 #else
 		dma_release_channel((unsigned int) prtd->dmach);
@@ -223,7 +223,7 @@ static int lpc313x_pcm_prepare(struct snd_pcm_substream *substream)
 		if (substream->stream == SNDRV_PCM_STREAM_PLAYBACK) {
 #if defined (CONFIG_SND_USE_DMA_LINKLIST)
 			prtd->dmach = dma_request_sg_channel("I2STX",
-				lpc313x_pcm_dma_irq, substream, 0);
+				lpc313x_pcm_dma_irq, substream, 0, 0, 0);
 			prtd->dma_cfg_base = DMA_CFG_TX_WORD |
 				DMA_CFG_RD_SLV_NR(0) | DMA_CFG_CMP_CH_EN |
 				DMA_CFG_WR_SLV_NR(TX_DMA_CHCFG) |
@@ -240,7 +240,7 @@ static int lpc313x_pcm_prepare(struct snd_pcm_substream *substream)
 		else {
 #if defined (CONFIG_SND_USE_DMA_LINKLIST)
 			prtd->dmach = dma_request_sg_channel("I2SRX",
-				lpc313x_pcm_dma_irq, substream, 0);
+				lpc313x_pcm_dma_irq, substream, 0, 0, 0);
 			prtd->dma_cfg_base = DMA_CFG_TX_WORD |
 				DMA_CFG_WR_SLV_NR(0) | DMA_CFG_CMP_CH_EN |
 				DMA_CFG_RD_SLV_NR(RX_DMA_CHCFG) |

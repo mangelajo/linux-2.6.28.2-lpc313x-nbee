@@ -252,10 +252,11 @@ static struct nand_bbt_descr lpc313x_largepage_flashbased = {
 static void lpc313x_nand_dma_irq(int chn, dma_irq_type_t type,
 		void *arg)
 {
+	unsigned int psrc, pdst, plen, pcfg, pena, pcnt;
 	struct lpc313x_nand_info *host = (struct lpc313x_nand_info *)arg;
 
 	/* SG Table ended */
-	if (type == DMA_IRQ_SOFTINT)
+	if (type == DMA_IRQ_FINISHED)
 	{
 		/* Flag event and wakeup */
 		host->dmapending = 1;
@@ -360,16 +361,8 @@ static void lpc313x_nand_dma_sg_tfr(struct mtd_info *mtd,
 	host->sg_cpu[1].setup.dest_address = rd ? oob_data :
 			(nand_buff_phys_addr[bufrdy] + eccsize);
 	host->sg_cpu[1].setup.trans_length = (oob_size >> 2) - 1;
-	host->sg_cpu[1].setup.cfg = DMA_CFG_CMP_CH_EN |
-		      DMA_CFG_CMP_CH_NR(host->dma_chn) | DMA_CFG_TX_WORD;
-	host->sg_cpu[1].next_entry = host->sg_dma + (sizeof(dma_sg_ll_t) * 2);
-
-	/* SG entry to transfer OOB data */
-	host->sg_cpu[2].setup.src_address = host->sg_dma;
-	host->sg_cpu[2].setup.dest_address = DMACH_SOFT_INT_PHYS;
-	host->sg_cpu[2].setup.trans_length = 1;
-	host->sg_cpu[2].setup.cfg = DMA_CFG_TX_WORD;
-	host->sg_cpu[2].next_entry = 0;
+	host->sg_cpu[1].setup.cfg = DMA_CFG_TX_WORD;
+	host->sg_cpu[1].next_entry = 0;
 
 	/* Program the SG channel */
 	dma_prog_sg_channel(host->dma_chn, host->sg_dma);
@@ -1405,8 +1398,8 @@ static int lpc313x_nand_probe(struct platform_device *pdev) {
 
 #ifdef USE_DMA
 	/* Allocate sg channel for DMA transfers */
-	host->dma_chn = dma_request_sg_channel("NAND", lpc313x_nand_dma_irq,
-			host, 1);
+	host->dma_chn = dma_request_sg_channel("NAND", 0, 0,
+			lpc313x_nand_dma_irq, host, 0);
 	if(host->dma_chn < 0) {
 		dev_err(&pdev->dev, "Failed to allocate DMA SG channel\n");
 		err = host->dma_chn;

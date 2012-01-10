@@ -282,9 +282,9 @@ static void lpc313x_mci_set_timeout(struct lpc313x_mci *host,
 
 	timeout = ns_to_clocks(slot->clock, data->timeout_ns) + data->timeout_clks;
 
-	dev_vdbg(&slot->mmc->class_dev, "tmo req:%d + %d reg:%d clk:%d\n", 
+	dev_vdbg(&slot->mmc->class_dev, "tmo req:%d + %d reg:%d clk:%d\n",
 		data->timeout_ns, data->timeout_clks, timeout, slot->clock);
-	/* the standard response timeout value (Ncr) is 64 clocks. 
+	/* the standard response timeout value (Ncr) is 64 clocks.
 	 * Let give 4 additional clocks for response.
 	 */
 	mci_writel(TMOUT, /*0xffffffff); */ (timeout << 8) | (70));
@@ -295,36 +295,36 @@ static u32 lpc313x_mci_prepare_command(struct mmc_host *mmc,
 {
 	struct mmc_data	*data;
 	u32		cmdr;
-	
+
 	cmd->error = -EINPROGRESS;
 	cmdr = cmd->opcode;
 
-	if(cmdr == 12) 
+	if(cmdr == 12)
 		cmdr |= SDMMC_CMD_STOP;
-	else 
+	else
 		cmdr |= SDMMC_CMD_PRV_DAT_WAIT;
 
 	if (cmd->flags & MMC_RSP_PRESENT) {
 		cmdr |= SDMMC_CMD_RESP_EXP; // expect the respond, need to set this bit
-		if (cmd->flags & MMC_RSP_136) 
+		if (cmd->flags & MMC_RSP_136)
 			cmdr |= SDMMC_CMD_RESP_LONG; // expect long respond
-		
-		if(cmd->flags & MMC_RSP_CRC) 
+
+		if(cmd->flags & MMC_RSP_CRC)
 			cmdr |= SDMMC_CMD_RESP_CRC;
 	}
 
 	data = cmd->data;
 	if (data) {
 		cmdr |= SDMMC_CMD_DAT_EXP;
-		if (data->flags & MMC_DATA_STREAM) 
+		if (data->flags & MMC_DATA_STREAM)
 			cmdr |= SDMMC_CMD_STRM_MODE; //  set stream mode
-		if (data->flags & MMC_DATA_WRITE) 
+		if (data->flags & MMC_DATA_WRITE)
 		    cmdr |= SDMMC_CMD_DAT_WR;
-		
+
 #if 0 /* Jerry, need to confirm the specification does we need to set this bit if blocks > 1 */
-		if(data->blocks > 1) 
+		if(data->blocks > 1)
 		    cmdr |= SDMMC_CMD_SEND_STOP;
-		
+
 #endif
 	}
 	return cmdr;
@@ -343,7 +343,7 @@ static void lpc313x_mci_start_command(struct lpc313x_mci *host,
 	mci_writel(CMD, cmd_flags | SDMMC_CMD_START); // write to CMD register
 
 	/* wait until CIU accepts the command */
-	while (--tmo && (mci_readl(CMD) & SDMMC_CMD_START)) 
+	while (--tmo && (mci_readl(CMD) & SDMMC_CMD_START))
 		cpu_relax();
 }
 
@@ -359,7 +359,7 @@ static void lpc313x_mci_dma_cleanup(struct lpc313x_mci *host)
 {
 	struct mmc_data			*data = host->data;
 
-	if (data) 
+	if (data)
 		dma_unmap_sg(&host->pdev->dev, data->sg, data->sg_len,
 		     ((data->flags & MMC_DATA_WRITE)
 		      ? DMA_TO_DEVICE : DMA_FROM_DEVICE));
@@ -464,9 +464,15 @@ static int lpc313x_mci_submit_data_dma(struct lpc313x_mci *host, struct mmc_data
 #endif
 
 			if (trans_len > DMA_MAX_TRANSFERS) {
+#ifdef BURST_DMA
+				trans_len = DMA_MAX_TRANSFERS;
+				length -= (DMA_MAX_TRANSFERS + 1) << 4;
+				mem_addr += ((DMA_MAX_TRANSFERS + 1) << 4);
+#else
 				trans_len = DMA_MAX_TRANSFERS;
 				length -= (DMA_MAX_TRANSFERS + 1) << 2;
 				mem_addr += ((DMA_MAX_TRANSFERS + 1) << 2);
+#endif
 			}
 			else {
 				length = 0;
@@ -524,7 +530,7 @@ static void lpc313x_mci_submit_data(struct lpc313x_mci *host, struct mmc_data *d
 		host->pio_offset = 0;
 		if (data->flags & MMC_DATA_READ)
 			host->dir_status = LPC313x_MCI_RECV_STATUS;
-		else 
+		else
 			host->dir_status = LPC313x_MCI_SEND_STATUS;
 
 		//SDMMC_INTMASK |= (SDMMC_INT_RXDR | SDMMC_INT_TXDR);
@@ -549,7 +555,7 @@ void lpc313x_mci_setup_bus(struct lpc313x_mci_slot *slot)
 
 		dev_dbg(&slot->mmc->class_dev, "Bus speed (slot %d) = %dHz div:%d (actual %dHz)\n",
 			slot->id, slot->clock, div, (host->bus_hz / div) >> 1);
-		
+
 		/* store the actual clock for calculations */
 		slot->clock = (host->bus_hz / div) >> 1;
 		/* disable clock */
@@ -606,17 +612,17 @@ static void lpc313x_mci_start_request(struct lpc313x_mci *host,
 	cmd = mrq->cmd;
 	cmdflags = lpc313x_mci_prepare_command(slot->mmc, cmd);
 
-	if (unlikely(test_and_clear_bit(LPC313x_MMC_CARD_NEED_INIT, &slot->flags))) 
+	if (unlikely(test_and_clear_bit(LPC313x_MMC_CARD_NEED_INIT, &slot->flags)))
 	    cmdflags |= SDMMC_CMD_INIT; //this is the first command, let set send the initializtion clock
-	
+
 	if (data) //we may need to move this code to mci_start_command
 		lpc313x_mci_submit_data(host, data);
 
 	lpc313x_mci_start_command(host, cmd, cmdflags);
 
-	if (mrq->stop) 
+	if (mrq->stop)
 		host->stop_cmdr = lpc313x_mci_prepare_command(slot->mmc, mrq->stop);
-	
+
 }
 
 
@@ -805,15 +811,15 @@ static void lpc313x_mci_command_complete(struct lpc313x_mci *host,
 	if (cmd->error) {
 		dev_vdbg(&host->pdev->dev,
 			"command error: status=0x%08x resp=0x%08x\n"
-			"cmd=0x%08x arg=0x%08x flg=0x%08x err=%d\n", 
-			status, cmd->resp[0], 
+			"cmd=0x%08x arg=0x%08x flg=0x%08x err=%d\n",
+			status, cmd->resp[0],
 			cmd->opcode, cmd->arg, cmd->flags, cmd->error);
 
 		if (cmd->data) {
 			host->data = NULL;
 			lpc313x_mci_stop_dma(host);
 		}
-	} 
+	}
 }
 
 static void lpc313x_mci_tasklet_func(unsigned long priv)
@@ -948,7 +954,7 @@ inline static void lpc313x_mci_push_data(void *buf,int cnt)
 {
     u32* pData = (u32*)buf;
 
-    if (cnt % 4 != 0) 
+    if (cnt % 4 != 0)
 	    printk("error not align 4\n");
 
     cnt = cnt >> 2;
@@ -962,7 +968,7 @@ inline static void lpc313x_mci_pull_data(void *buf,int cnt)
 {
     u32* pData = (u32*)buf;
 
-    if (cnt % 4 != 0) 
+    if (cnt % 4 != 0)
 	    printk("error not align 4\n");
     cnt = cnt >> 2;
     while (cnt > 0) {
@@ -982,7 +988,7 @@ static void lpc313x_mci_read_data_pio(struct lpc313x_mci *host)
 
 	do {
 		len = SDMMC_GET_FCNT(mci_readl(STATUS)) << 2;
-		if(count == 0) 
+		if(count == 0)
 			old_len = len;
 		if (likely(offset + len <= sg->length)) {
 			lpc313x_mci_pull_data((void *)(buf + offset),len);
@@ -1103,7 +1109,7 @@ done:
 
 static void lpc313x_mci_cmd_interrupt(struct lpc313x_mci *host, u32 status)
 {
-	if(!host->cmd_status) 
+	if(!host->cmd_status)
 		host->cmd_status = status;
 
 	smp_wmb();
@@ -1146,7 +1152,7 @@ static irqreturn_t lpc313x_mci_interrupt(int irq, void *dev_id)
 			host->data_status = status;
 		    smp_wmb();
 		    if(host->dir_status == LPC313x_MCI_RECV_STATUS) {
-			if(host->sg != NULL) 
+			if(host->sg != NULL)
 				lpc313x_mci_read_data_pio(host);
 		    }
 		    lpc313x_mci_set_pending(host, EVENT_DATA_COMPLETE);
@@ -1155,7 +1161,7 @@ static irqreturn_t lpc313x_mci_interrupt(int irq, void *dev_id)
 
 		if (pending & SDMMC_INT_RXDR) {
 		    mci_writel(RINTSTS,SDMMC_INT_RXDR);  //  clear interrupt
-		    if(host->sg) 
+		    if(host->sg)
 			    lpc313x_mci_read_data_pio(host);
 		}
 
@@ -1171,7 +1177,7 @@ static irqreturn_t lpc313x_mci_interrupt(int irq, void *dev_id)
 		    lpc313x_mci_cmd_interrupt(host, status);
 		}
 	} while (pass_count++ < 5);
-	
+
 	spin_unlock(&host->lock);
 
 	return pass_count ? IRQ_HANDLED : IRQ_NONE;
@@ -1225,7 +1231,7 @@ static void lpc313x_mci_detect_change(unsigned long slot_data)
 				host->pdata->setpower(slot->id, 0);
 
 			clear_bit(LPC313x_MMC_CARD_PRESENT, &slot->flags);
-		}			
+		}
 
 
 		/* Clean up queue if present */
@@ -1439,11 +1445,20 @@ static int lpc313x_mci_probe(struct platform_device *pdev)
 	CGU_CFG->resetn_soft[SD_MMC_PNRES_SOFT] = CGU_CONFIG_SOFT_RESET;
 
 #ifdef USE_DMA
-	host->dma_chn = dma_request_sg_channel("MCI",  lpc313x_mci_dma_complete, host, 1);
+	host->dma_chn = dma_request_sg_channel("MCI",  lpc313x_mci_dma_complete, host,
+			0, 0, 1);
+	if(host->dma_chn < 0) {
+		dev_err(&pdev->dev, "Failed to allocate DMA SG channel\n");
+		printk(KERN_CRIT "Failed to allocate DMA SG channel\n");
+		ret = host->dma_chn;
+		goto err_freemap;
+	}
+
 	host->sg_cpu = dma_alloc_coherent(&pdev->dev, PAGE_SIZE, &host->sg_dma, GFP_KERNEL);
 	if (host->sg_cpu == NULL) {
 		dev_err(&pdev->dev,
 			 "%s: could not alloc dma memory \n", __func__);
+		ret = -ENOMEM;
 		goto err_freemap;
 	}
 #endif

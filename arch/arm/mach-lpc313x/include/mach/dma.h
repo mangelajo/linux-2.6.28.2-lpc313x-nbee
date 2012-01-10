@@ -1,5 +1,5 @@
 /*  linux/arch/arm/mach-lpc313x/include/mach/dma.h
- *  
+ *
  *  Author:	Durgesh Pattamatta
  *  Copyright (C) 2009 NXP semiconductors
  *
@@ -100,14 +100,14 @@
 /*
  * Type of interrupt
  */
-typedef enum 
+typedef enum
 {
 	DMA_IRQ_FINISHED = 0,
 	DMA_IRQ_HALFWAY,
 	DMA_IRQ_SOFTINT,
 	DMA_IRQ_DMAABORT
 } dma_irq_type_t;
- /* 
+ /*
  * DMA IRQ channel callback function
  * parameters:
  * 1st parameter - channel number for which an IRQ occured
@@ -149,7 +149,7 @@ typedef struct dma_setup
 } dma_setup_t;
 
 /*
- * SDMA scatter-gather list structure 
+ * SDMA scatter-gather list structure
  */
 typedef struct dma_sg_ll
 {
@@ -170,7 +170,7 @@ typedef struct dma_sg_ll
  * 1st parameter - channel number, obtained from dma_request_channel()
  * 2nd parameter - ptr to the structure containing setup info for the channel
  *
- * Returns: 0 on success, otherwise failure 
+ * Returns: 0 on success, otherwise failure
  */
 int dma_prog_channel (unsigned int, dma_setup_t   *);
 
@@ -184,7 +184,7 @@ int dma_prog_channel (unsigned int, dma_setup_t   *);
  * 3rd parameter - additional data (callback-specific context) to be passed
  *                 to the callback function when it's invoked
  *
- * Returns: channel number on success, otherwise (negative) failure 
+ * Returns: channel number on success, otherwise (negative) failure
  */
 int dma_request_channel (char *, dma_cb_t cb, void *);
 
@@ -200,7 +200,7 @@ int dma_request_channel (char *, dma_cb_t cb, void *);
  *                 to the callback function when it's invoked
  *
  *
- * Returns: channel number on success, otherwise (negative) failure 
+ * Returns: channel number on success, otherwise (negative) failure
  */
 int dma_request_specific_channel (int, char *, dma_cb_t cb, void *);
 
@@ -223,7 +223,7 @@ int dma_set_irq_mask(unsigned int, int, int);
  * Function parameters:
  * 1st parameter - SDMA channel number
  *
- * Returns: 0 on success, otherwise failure 
+ * Returns: 0 on success, otherwise failure
  */
 int dma_start_channel (unsigned int);
 
@@ -233,7 +233,7 @@ int dma_start_channel (unsigned int);
  * Function parameters:
  * 1st parameter - SDMA channel number
  *
- * Returns: 0 on success, otherwise failure 
+ * Returns: 0 on success, otherwise failure
  */
 int dma_stop_channel (unsigned int);
 
@@ -243,7 +243,7 @@ int dma_stop_channel (unsigned int);
  * Function parameters:
  * 1st parameter - SDMA channel number
  *
- * Returns: 0 on success, otherwise failure 
+ * Returns: 0 on success, otherwise failure
  */
 int dma_release_channel (unsigned int);
 
@@ -254,7 +254,7 @@ int dma_release_channel (unsigned int);
  * 1st parameter - SDMA channel number
  * 2nd parameter - ptr to the counter variable to be filled
  *
- * Returns: 0 on success, otherwise failure 
+ * Returns: 0 on success, otherwise failure
  */
 int dma_read_counter (unsigned int, unsigned int *);
 
@@ -265,7 +265,7 @@ int dma_read_counter (unsigned int, unsigned int *);
  * 1st parameter - SDMA channel number
  * 2nd parameter - value to be written
  *
- * Returns: 0 on success, otherwise failure 
+ * Returns: 0 on success, otherwise failure
  */
 int dma_write_counter (unsigned int, u32);
 
@@ -281,7 +281,7 @@ int dma_write_counter (unsigned int, u32);
  * 6th parameter - ptr to the enable flag variable to be filled
  * 7th parameter - ptr to the address counter variable to be filled
  *
- * Returns: 0 on success, otherwise failure 
+ * Returns: 0 on success, otherwise failure
  */
 int dma_current_state    (unsigned int, unsigned int *, unsigned int *, unsigned int *, unsigned int  *, unsigned int  *, unsigned int  *);
 
@@ -292,10 +292,14 @@ int dma_current_state    (unsigned int, unsigned int *, unsigned int *, unsigned
  * Function parameters:
  * 1st parameter - free-form string identifier of channel.
  * 2nd parameter - callback function to be invoked when an interrupt
- *                 occurs for this channel
+ *                 occurs for the first channel
  * 3rd parameter - additional data (callback-specific context) to be passed
- *                 to the callback function when it's invoked
- * 4th parameter - flag to enable soft IRQ for this channel. Only 1 channel
+ *                 to the callback function of first channel when it's invoked
+ * 4th parameter - callback function to be invoked when an interrupt
+ *                 occurs for the second channel
+ * 5th parameter - additional data (callback-specific context) to be passed
+ *                 to the callback function of second channel when it's invoked
+ * 6th parameter - flag to enable soft IRQ for this channel. Only 1 channel
  *                 may be enabled with soft-irq.
  *
  * Callback parameters:
@@ -306,7 +310,8 @@ int dma_current_state    (unsigned int, unsigned int *, unsigned int *, unsigned
  *
  * Returns: bigger channel number on success, otherwise negative error code
  */
-int dma_request_sg_channel (char *, dma_cb_t cb, void *, int);
+int dma_request_sg_channel (char *, dma_cb_t cb1, void *,
+		dma_cb_t cb2, void *, int);
 
 /*
  * Request specific SDMA SG channel (actually pair of channels)
@@ -314,12 +319,15 @@ int dma_request_sg_channel (char *, dma_cb_t cb, void *, int);
  *
  * Function parameters:
  * 1st parameter - SDMA channel number
- * 2nd parameter - free-form string identifier of channel.
- * 3rd parameter - callback function to be invoked when an interrupt
- *                 occurs for this channel
- * 4th parameter - additional data (callback-specific context) to be passed
- *                 to the callback function when it's invoked
- * 5th parameter - flag to enable soft IRQ for this channel. Only 1 channel
+ * 2nd parameter - callback function to be invoked when an interrupt
+ *                 occurs for the first channel
+ * 3rd parameter - additional data (callback-specific context) to be passed
+ *                 to the callback function of first channel when it's invoked
+ * 4th parameter - callback function to be invoked when an interrupt
+ *                 occurs for the second channel
+ * 5th parameter - additional data (callback-specific context) to be passed
+ *                 to the callback function of second channel when it's invoked
+ * 6th parameter - flag to enable soft IRQ for this channel. Only 1 channel
  *                 may be enabled with soft-irq.
  *
  * Callback parameters:
@@ -330,20 +338,21 @@ int dma_request_sg_channel (char *, dma_cb_t cb, void *, int);
  *
  * Returns: bigger channel number on success, otherwise negative error code
  */
-int dma_request_specific_sg_channel (int, char *, dma_cb_t cb, void *, int);
+int dma_request_specific_sg_channel (int, char *, dma_cb_t cb1, void *,
+		dma_cb_t cb2, void *, int);
 
 /*
  * Prepare SG list for programming into the SDMA controller
  * This function is intended to set right companion channel for each
- * entry in the list except the last one and to set the last entry of 
- * the scatter-gather list according to one of the methods to define 
+ * entry in the list except the last one and to set the last entry of
+ * the scatter-gather list according to one of the methods to define
  * the last entry described.
  *
  * Function parameters:
  * 1st parameter - channel number returned by dma_request_sg_channel()
  * 2nd parameter - ptr to the first scatter gather list entry
  *
- * Returns: 0 on success, otherwise failure 
+ * Returns: 0 on success, otherwise failure
  */
 int dma_prepare_sg_list(int, dma_sg_ll_t *);
 
@@ -353,10 +362,10 @@ int dma_prepare_sg_list(int, dma_sg_ll_t *);
  * the user has to supply only the linked-list address
  *
  * Function parameters:
- * 1st parameter - channel number returned by dma_request_sg_channel() 
+ * 1st parameter - channel number returned by dma_request_sg_channel()
  * 2nd parameter - physical ptr to the first entry in the linked list
  *
- * Returns: 0 on success, otherwise failure 
+ * Returns: 0 on success, otherwise failure
  */
 int dma_prog_sg_channel(int, u32 );
 
@@ -366,7 +375,7 @@ int dma_prog_sg_channel(int, u32 );
  * Function parameters:
  * 1st parameter - channel number returned by dma_request_sg_channel()
  *
- * Returns: 0 on success, otherwise failure 
+ * Returns: 0 on success, otherwise failure
  */
 int dma_release_sg_channel (unsigned int);
 
