@@ -176,6 +176,18 @@ void __init lpc313x_map_io(void)
 }
 extern int __init cgu_init(char *str);
 
+void __init lpc313x_uart_init(void)
+{
+	int mul, div;
+
+	/* check what FDR bootloader is using */
+	mul = (UART_FDR_REG >> 4) & 0xF;
+	div = UART_FDR_REG & 0xF;
+	if (div != 0)  {
+		platform_serial_ports[0].uartclk = (XTAL_CLOCK * mul) / (mul + div);
+	}
+}
+
 int __init lpc313x_init(void)
 {
 	/* cgu init */
@@ -217,6 +229,8 @@ int __init lpc313x_init(void)
 	/* AUDIO CODEC CLOCK (256FS) */
 	GPIO_DRV_IP(IOCONF_I2STX_1, 0x8);
 
+	lpc313x_uart_init();
+
 	return platform_add_devices(devices, ARRAY_SIZE(devices));
 }
 
@@ -247,8 +261,8 @@ static int __init lpc313x_init_console(void)
 	mul = (UART_FDR_REG >> 4) & 0xF;
 	div = UART_FDR_REG & 0xF;
 	if (div != 0)  {
-		up.uartclk = (XTAL_CLOCK * mul) / (mul + div); 
-	} 
+		up.uartclk = (XTAL_CLOCK * mul) / (mul + div);
+	}
 	up.regshift = 2;
 	up.iotype = UPIO_MEM;
 	up.type	= PORT_NXP16750;
