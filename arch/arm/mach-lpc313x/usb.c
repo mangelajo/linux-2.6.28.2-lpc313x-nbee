@@ -27,50 +27,22 @@
 #include <linux/kernel.h>
 #include <linux/types.h>
 #include <linux/errno.h>
-#include <linux/err.h>
 #include <linux/init.h>
 #include <linux/delay.h>
 #include <linux/platform_device.h>
-#include <linux/mod_devicetable.h>
-#include <linux/usb.h>
 #include <linux/usb/otg.h>
 #include <linux/fsl_devices.h>
 #include <linux/io.h>
 #include <linux/interrupt.h>
-#include <linux/irq.h>
 
 #include <asm/irq.h>
 #include <asm/system.h>
 #include <mach/board.h>
-#include <mach/gpio.h>
 
 /****************************************************************************
 * USBOTG register definition
 ****************************************************************************/
-#define USB_DEV_USBCMD			__REG(USBOTG_PHYS + 0x140)
-#define USB_DEV_USBSTS			__REG(USBOTG_PHYS + 0x144)
-#define USB_DEV_USBINTR			__REG(USBOTG_PHYS + 0x148)
-#define USB_DEV_FRINDEX			__REG(USBOTG_PHYS + 0x14C)
-#define USB_DEV_CONFIGFLAG              __REG(USBOTG_PHYS + 0x180)
-#define USB_DEV_PORTSC1			__REG(USBOTG_PHYS + 0x184)
 #define USB_DEV_OTGSC			__REG(USBOTG_PHYS + 0x1A4)
-#define USB_DEV_USBMODE			__REG(USBOTG_PHYS + 0x1A8)
-
-/* bit defines for USBCMD register */
-#define USBCMD_RS	  _BIT(0)
-#define USBCMD_RST	  _BIT(1)
-#define USBCMD_ATDTW	  _BIT(12)
-#define USBCMD_SUTW	  _BIT(13)
-
-/* bit defines for PRTSC1 register */
-#define USBPRTS_CCS	  _BIT(0)
-#define USBPRTS_PE	  _BIT(2)
-#define USBPRTS_FPR	  _BIT(6)
-#define USBPRTS_SUSP	  _BIT(7)
-#define USBPRTS_PR	  _BIT(8)
-#define USBPRTS_HSP	  _BIT(9)
-#define USBPRTS_PLPSCD	  _BIT(23)
-#define USBPRTS_PFSC	  _BIT(24)
 
 /* bit defines for OTGSC register */
 #define OTGSC_VD          _BIT(0)
@@ -94,73 +66,81 @@
 #define OTGSC_INT_EN(n)   _BIT(24 + (n))
 #define OTGSC_INT_STAT_MASK (0x007F0000)
 
+
 /*-------------------------------------------------------------------------*/
-static struct resource lpc313x_usb_resource[] = {
-	[0] = {
-		.start = (u32) (USBOTG_PHYS),
-		.end   = (u32) (USBOTG_PHYS + SZ_4K),
-		.flags = IORESOURCE_MEM,
-	},
-	[1] = {
-		.start = IRQ_USB,
-		.end   = IRQ_USB,
-		.flags = IORESOURCE_IRQ,
-	}
-};
-
-struct lpc313x_usb_board_t {
-	/* timer for VBUS enable */
-	struct timer_list	vbus_timer;
-	/* board specific over current monitor */
-	int	vbus_ovrc_irq;
-};
-
-static struct lpc313x_usb_board_t lpc313x_usb_brd;
-
-static u64 usb_dmamask = 0xffffffffUL;;
 static void	lpc313x_usb_release(struct device *dev);
 
+static struct resource lpc313x_udc_resource[] = {
+		[0] = {
+			.start = USBOTG_PHYS,
+			.end   = USBOTG_PHYS + SZ_4K,
+			.flags = IORESOURCE_MEM,
+		},
+		[1] = {
+			.start = IRQ_USB,
+			.end   = IRQ_USB,
+			.flags = IORESOURCE_IRQ,
+		}
+};
+
 struct fsl_usb2_platform_data lpc313x_fsl_config = {
-#if defined(CONFIG_USB_OTG) || (defined(CONFIG_USB_EHCI_HCD) && defined(CONFIG_USB_GADGET_FSL_USB2))
-	.operating_mode = FSL_USB2_DR_OTG,
-#elif defined(CONFIG_USB_GADGET_FSL_USB2) && !defined(CONFIG_USB_EHCI_HCD)
+
 	.operating_mode = FSL_USB2_DR_DEVICE,
-#elif !defined(CONFIG_USB_GADGET_FSL_USB2) && defined(CONFIG_USB_EHCI_HCD)
-	.operating_mode = FSL_USB2_DR_HOST,
-#endif
 	.phy_mode = FSL_USB2_PHY_UTMI,
 };
 
-#if defined(CONFIG_USB_GADGET_FSL_USB2) || defined(CONFIG_USB_OTG)
+static u64 udc_dmamask = 0xffffffffUL;;
 
 static struct platform_device lpc313x_udc_device = {
 	.name = "fsl-usb2-udc",
 	.dev = {
-		.dma_mask          = &usb_dmamask,
+		.dma_mask          = &udc_dmamask,
 		.coherent_dma_mask = 0xffffffff,
 		.release           = lpc313x_usb_release,
 		.platform_data     = &lpc313x_fsl_config,
 	},
-	.num_resources = ARRAY_SIZE(lpc313x_usb_resource),
-	.resource      = lpc313x_usb_resource,
+	.num_resources = ARRAY_SIZE(lpc313x_udc_resource),
+	.resource      = lpc313x_udc_resource,
 };
-#endif
 
-#if defined(CONFIG_USB_EHCI_HCD) || defined(CONFIG_USB_OTG)
 
-static struct platform_device lpc313x_ehci_device = {
+static struct resource ehci_lpc_resources[] = {
+	[0] = {
+		.start	= USBOTG_PHYS,
+		.end	= USBOTG_PHYS + SZ_4K,
+		.flags	= IORESOURCE_MEM,
+	} ,
+	[1] = {
+		.start	= IRQ_USB,
+		.end	= IRQ_USB,
+		.flags	= IORESOURCE_IRQ,
+	},
+};
+static u64 ehci_dmamask = 0xffffffffUL;
+
+static struct platform_device ehci_lpc_device = {
 	.name		= "lpc-ehci",
-	.dev = {
-		.dma_mask          = &usb_dmamask,
-		.coherent_dma_mask = 0xffffffff,
-		.release           = lpc313x_usb_release,
-		.platform_data     = &lpc313x_fsl_config,
+	.num_resources	= ARRAY_SIZE(ehci_lpc_resources),
+	.dev		= {
+		.dma_mask		= &ehci_dmamask,
+		.coherent_dma_mask	= 0xffffffff,
+		.release = lpc313x_usb_release,
 	},
-	.num_resources = ARRAY_SIZE(lpc313x_usb_resource),
-	.resource      = lpc313x_usb_resource,
+	.resource	= ehci_lpc_resources,
 };
-#endif
 
+
+struct lpc_otg_dev_t
+{
+	int current_state;
+	struct platform_device* curr_dev;
+
+};
+static struct lpc_otg_dev_t g_otg_dev;
+
+static void change_state(struct work_struct *work);
+
+DECLARE_WORK(swap_work, change_state);
 
 /*-------------------------------------------------------------------------*/
 static void	lpc313x_usb_release(struct device *dev)
@@ -168,30 +148,73 @@ static void	lpc313x_usb_release(struct device *dev)
 	// do nothing
 }
 
-static irqreturn_t lpc313x_vbus_ovrc_irq(int irq, void *data)
+static void change_state(struct work_struct *work)
 {
-	struct lpc313x_usb_board_t* brd = data;
-	/* disable VBUS power */
-	lpc313x_vbus_power(0);
-	/* Disable over current IRQ */
-	disable_irq_nosync(irq);
-	printk(KERN_INFO "Disabling VBUS as device is drawing too much current!!\n");
-	printk(KERN_INFO "Please disconnect the high-power USB device!!\n");
+	struct lpc_otg_dev_t *pdev = &g_otg_dev;
+	struct platform_device* reg_dev = NULL;
+	int retval = 0;
+	u32 stat = USB_DEV_OTGSC;
 
-	/* start the timer to re-enable power to VBUS and IRQ */
-	mod_timer(&brd->vbus_timer, jiffies + msecs_to_jiffies(2000));
+	printk(KERN_INFO "USB OTG changing device state from %d \n", pdev->current_state);
 
-	return IRQ_HANDLED;
+	if (stat & OTGSC_STATUS(OTGSC_ID_INT)) {
+		/* check if we are already in B state. Then do nothing. */
+		if (pdev->current_state != OTG_STATE_B_IDLE) {
+			reg_dev = &lpc313x_udc_device;
+			pdev->current_state = OTG_STATE_B_IDLE;
+			lpc313x_vbus_power(0);
+			printk(KERN_INFO "USB OTG changing device state to B device \n");
+		}
+	} 
+	else {
+		/* check if we are already in A state. Then do nothing. */
+		if (pdev->current_state != OTG_STATE_A_IDLE) {
+			reg_dev = &ehci_lpc_device;
+			pdev->current_state = OTG_STATE_A_IDLE;
+			lpc313x_vbus_power(1);
+			printk(KERN_INFO "USB OTG changing device state to A device \n");
+		}
+	}
+	disable_irq(IRQ_USB);
+
+	if (pdev->curr_dev != NULL) {
+		platform_device_unregister(pdev->curr_dev);
+	}
+	pdev->curr_dev = reg_dev;
+	if (reg_dev != NULL) {
+		retval = platform_device_register(reg_dev);
+		if ( 0 != retval )
+			printk(KERN_ERR "Can't register %s device (%d)\n",reg_dev->name, retval);
+
+	}
+	USB_DEV_OTGSC |= OTGSC_INT_EN(OTGSC_ID_INT);
+	enable_irq(IRQ_USB);
 }
 
-static void lpc313x_vbusen_timer(unsigned long data)
+irqreturn_t lpc313x_otg_irq(int irq, void *_dev)
 {
-	struct lpc313x_usb_board_t* brd = (struct lpc313x_usb_board_t*)data;
-	/* enable VBUS power */
-	lpc313x_vbus_power(1);
-	msleep(2);
-	/* enable the VBUS overcurrent monitoring IRQ */
-	enable_irq(brd->vbus_ovrc_irq);
+	struct lpc_otg_dev_t *pdev = _dev;
+	u32 stat;
+
+	if (!(USB_DEV_OTGSC & OTGSC_IDPU)) {
+		//printk( "ID pull-up disabled(0x%08x)\n", USB_DEV_OTGSC);
+		USB_DEV_OTGSC |= OTGSC_IDPU;
+	}
+
+	stat = USB_DEV_OTGSC & OTGSC_INT_STAT_MASK;  /* Device Interrupt Status */
+	
+	if (stat)
+		USB_DEV_OTGSC |= OTGSC_INT_STAT_MASK;
+
+
+	if (stat & OTGSC_INT_STAT(OTGSC_ID_INT)) {
+		USB_DEV_OTGSC = (USB_DEV_OTGSC & 0x0F);
+		schedule_work(&swap_work);
+		//change_state(NULL);
+	}
+
+
+	return IRQ_HANDLED;
 }
 
 
@@ -210,18 +233,12 @@ int __init usbotg_init(void)
 	/* reset USB block */
 	cgu_soft_reset_module(USB_OTG_AHB_RST_N_SOFT);
 
-	/* check if bootloader already enabled USB PLL */
-	if (SYS_USB_ATX_PLL_PD_REG != 0) {
-		/* enable USB OTG PLL */
-		SYS_USB_ATX_PLL_PD_REG = 0x0;
-		/* wait for PLL to lock */
-		while (!(EVRT_RSR(bank) & _BIT(bit_pos)));
-	}
+	/* enable USB OTG PLL */
+	SYS_USB_ATX_PLL_PD_REG = 0x0;
+	/* wait for PLL to lock */
+	while (!(EVRT_RSR(bank) & _BIT(bit_pos)));
 
-	/* reset the controller */
-	USB_DEV_USBCMD = USBCMD_RST;
-	/* wait for reset to complete */
-	while (USB_DEV_USBCMD & USBCMD_RST);
+	g_otg_dev.curr_dev = NULL;
 
 	/* enable pull-up on ID pin so that we detect external pull-downs*/
 	USB_DEV_OTGSC |= OTGSC_IDPU;
@@ -229,70 +246,38 @@ int __init usbotg_init(void)
 	udelay(5);
 	
 	/* check ID state */
-	if ((USB_DEV_OTGSC & OTGSC_STATUS(OTGSC_ID_INT))) {
-#if defined(CONFIG_USB_GADGET_FSL_USB2)
-		/* register gadget */
-		printk(KERN_INFO "Registering USB gadget 0x%08x 0x%08x (%d)\n", USB_DEV_OTGSC, EVRT_RSR(bank), bank);
-		retval = platform_device_register(&lpc313x_udc_device);
-		if ( 0 != retval )
-			printk(KERN_INFO "Can't register lpc313x_udc_device device\n");
-#else
-		printk(KERN_ERR "Unable to register USB gadget. Check USB_ID jumper!!!!!\n");
-#endif
-	} else {
-#if defined(CONFIG_USB_EHCI_HCD)
-		/* enable VBUS power */
-		lpc313x_vbus_power(1);
-		msleep(2);
-
+	if (!(USB_DEV_OTGSC & OTGSC_STATUS(OTGSC_ID_INT))) {
 		/* register host */
 		printk(KERN_INFO "Registering USB host 0x%08x 0x%08x (%d)\n", USB_DEV_OTGSC, EVRT_RSR(bank), bank);
-		retval = platform_device_register(&lpc313x_ehci_device);
-		if ( 0 != retval )
-			printk(KERN_INFO "Can't register lpc313x_ehci_device device\n");
+		g_otg_dev.curr_dev = &ehci_lpc_device;
+		g_otg_dev.current_state = OTG_STATE_A_IDLE;
+		lpc313x_vbus_power(1);
 
-		/* Create VBUS enable timer */
-		setup_timer(&lpc313x_usb_brd.vbus_timer, lpc313x_vbusen_timer,
-				(unsigned long)&lpc313x_usb_brd);
+	} else {
+		/* register gadget */
+		printk(KERN_INFO "Registering USB gadget 0x%08x 0x%08x (%d)\n", USB_DEV_OTGSC, EVRT_RSR(bank), bank);
+		lpc313x_vbus_power(0);
 
-#if defined(CONFIG_MACH_EA313X) || defined(CONFIG_MACH_EA3152)
-		/* set thw I2SRX_WS0 pin as GPIO_IN for vbus overcurrent flag */
-		gpio_direction_input(GPIO_I2SRX_WS0);
-		lpc313x_usb_brd.vbus_ovrc_irq = IRQ_EA_VBUS_OVRC;
-
-#else
-		lpc313x_usb_brd.vbus_ovrc_irq = IRQ_VBUS_OVRC;
-#endif
-
-		/* request IRQ to handle VBUS power event */
-		retval = request_irq( lpc313x_usb_brd.vbus_ovrc_irq, lpc313x_vbus_ovrc_irq, 
-			IRQF_DISABLED, "VBUSOVR", 
-			&lpc313x_usb_brd);
-
-		if ( 0 != retval )
-			printk(KERN_INFO "Unable to register IRQ_VBUS_OVRC handler\n");
-		
-#else
-		printk(KERN_ERR "Unable to register USB host. Check USB_ID jumper!!!!!\n");
-#endif
+		g_otg_dev.curr_dev = &lpc313x_udc_device;
+		g_otg_dev.current_state = OTG_STATE_B_IDLE;
 	}
-	
-#if !defined(CONFIG_USB_GADGET_FSL_USB2) && !defined(CONFIG_USB_OTG) && !defined(CONFIG_USB_EHCI_HCD)
-	/* if no USB component is enabled power-down USB block */
-	/* put in host mode */
-	USB_DEV_USBMODE = 0x3;
 
-	/* switch off PHY clock */
-	USB_DEV_PORTSC1 |= 0x00000080;
-	USB_DEV_PORTSC1 |= 0x00800000;
-
-	/* power off USB PLL */
-	SYS_USB_ATX_PLL_PD_REG = 1;
-	/* disable USB to AHB clock */
-	cgu_clk_en_dis(CGU_SB_USB_OTG_AHB_CLK_ID, 0);
+	if (0 == retval) {
+		retval = platform_device_register(g_otg_dev.curr_dev);
+		if ( 0 != retval )
+			printk(KERN_ERR "Can't register %s device\n", g_otg_dev.curr_dev->name);
+	}
+	printk(KERN_INFO "Returning from usbotg_init()\n");
+#if 0 
+	/* request IRQ to handle OTG events */
+	retval = request_irq(IRQ_USB, lpc313x_otg_irq, IRQF_SHARED, "OTG", &g_otg_dev);
+	/* enable OTG interrupts */
+	USB_DEV_OTGSC |= OTGSC_INT_EN(OTGSC_ID_INT) | OTGSC_INT_STAT(OTGSC_ID_INT);
 #endif
 
 	return retval;
 }
 
-arch_initcall(usbotg_init);
+// __initcall(usbotg_init);
+
+

@@ -18,6 +18,8 @@
  * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  *
  */
+ 
+#include <mach/gpio.h>
 #include <mach/hardware.h>
 #include <mach/cgu.h>
 
@@ -29,6 +31,8 @@ static inline void arch_idle(void)
 
 static inline void arch_reset(char mode)
 {
+
+
 	printk("arch_reset: attempting watchdog reset\n");
 
 	/* enable WDT clock */
@@ -48,5 +52,5 @@ static inline void arch_reset(char mode)
 	WDT_TCR = WDT_TCR_CNT_EN;
 	cpu_reset (0);/* loop forever and wait for reset to happen */
 
-	/*NOTREACHED*/
+
 }

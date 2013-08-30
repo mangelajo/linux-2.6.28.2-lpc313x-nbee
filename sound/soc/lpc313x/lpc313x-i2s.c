@@ -2,8 +2,10 @@
  * sound/soc/lpc313x/lpc313x-i2s.c
  *
  * Author: Kevin Wells <kevin.wells@nxp.com>
+ * Fixes: Miguel Angel Ajo <miguelangel@nbee.es>
  *
  * Copyright (C) 2009 NXP Semiconductors
+ * Portions Copyright (C) 2010 NBEE Embedded Systems S.L.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -49,7 +51,7 @@
     (SNDRV_PCM_RATE_8000  | SNDRV_PCM_RATE_11025 | SNDRV_PCM_RATE_16000 | \
      SNDRV_PCM_RATE_22050 | SNDRV_PCM_RATE_32000 | SNDRV_PCM_RATE_44100 | \
      SNDRV_PCM_RATE_48000)
-#define LPC313X_I2S_FORMATS (SNDRV_PCM_FMTBIT_S16)
+#define LPC313X_I2S_FORMATS (SND_SOC_DAIFMT_I2S | SNDRV_PCM_FMTBIT_S16)
 
 #define CH_PLAY 0
 #define CH_REC  1
@@ -170,19 +172,20 @@ static void lpc313x_i2s_shutdown(struct snd_pcm_substream *substream)
 static int lpc313x_i2s_startup(struct snd_pcm_substream *substream)
 {
 	int dir = lpc313x_get_ch_dir(substream);
-
+	printk("lpc313x_i2s_startup dir=%d\n",dir);
 	/* Select master/slave mode for RX channel */
 	if (dir == CH_REC) {
 #if defined (CONFIG_SND_I2S_RX0_SLAVE) | defined (CONFIG_SND_I2S_RX1_SLAVE)
 		I2S_CFG_MUX_SETTINGS = 0;
 #endif
 #if defined (CONFIG_SND_I2S_RX0_MASTER)
-		I2S_CFG_MUX_SETTINGS = I2S_RXO_SELECT_MASTER;
+		I2S_CFG_MUX_SETTINGS = I2S_RX0_SELECT_MASTER;
 #endif
 #if defined (CONFIG_SND_I2S_RX1_MASTER)
 		I2S_CFG_MUX_SETTINGS = I2S_RX1_SELECT_MASTER;
 #endif
 	}
+
 
 	if (i2s_info.ch_info[dir].ch_on != 0) {
 		/* This channel already enabled! */
@@ -203,6 +206,8 @@ static int lpc313x_i2s_startup(struct snd_pcm_substream *substream)
 	i2s_info.ch_info[dir].ch_on = 1;
 	lpc313x_chan_clk_enable(i2s_info.ch_info[dir].chclk, 0, 0);
 
+	
+
 	/* Mask all interrupts for the I2S channel */
 	I2S_CH_INT_MASK(i2s_info.ch_info[dir].i2s_ch) = I2S_FIFO_ALL_MASK;
 
@@ -212,10 +217,15 @@ static int lpc313x_i2s_startup(struct snd_pcm_substream *substream)
 static int lpc313x_i2s_set_dai_sysclk(struct snd_soc_dai *cpu_dai,
 				      int clk_id, unsigned int freq, int dir)
 {
+
 	/* Will use in HW params later */
-//	i2s_info.ch_info[cpu_dai->id].ws_freq = freq;
-	i2s_info.ch_info[CH_REC].ws_freq = freq;
+
+	//i2s_info.ch_info[cpu_dai->id].ws_freq = freq;
+	
+	// both channels use same frequency
 	i2s_info.ch_info[CH_PLAY].ws_freq = freq;
+	i2s_info.ch_info[CH_REC].ws_freq = freq;
+
 	return 0;
 }
 
@@ -224,8 +234,10 @@ static int lpc313x_i2s_set_dai_fmt(struct snd_soc_dai *cpu_dai,
 {
 	/* Will use in HW params later */
 //	i2s_info.ch_info[cpu_dai->id].daifmt = fmt;
-	i2s_info.ch_info[CH_REC].daifmt = fmt;
+
+	// both channels use same format
 	i2s_info.ch_info[CH_PLAY].daifmt = fmt;
+	i2s_info.ch_info[CH_REC].daifmt = fmt;
 
 	return 0;
 }
@@ -247,6 +259,8 @@ static int lpc313x_i2s_hw_params(struct snd_pcm_substream *substream,
 	int dir = lpc313x_get_ch_dir(substream);
 	u32 tmp;
 
+
+
 	/* Setup the I2S data format */
 	tmp = 0;
 	switch (i2s_info.ch_info[dir].daifmt & SND_SOC_DAIFMT_FORMAT_MASK) {
@@ -267,6 +281,7 @@ static int lpc313x_i2s_hw_params(struct snd_pcm_substream *substream,
 	}
 
 #if defined (CONFIG_SND_DEBUG_VERBOSE)
+	pr_info("\nlpc313x_i2s_hw_params(dir=%d)\n",dir);
 	pr_info("Desired clock rate : %d\n", i2s_info.ch_info[dir].ws_freq);
 	pr_info("Channels           : %d\n", params_channels(params));
 	pr_info("Data format        : %d\n", i2s_info.ch_info[dir].daifmt);
@@ -282,6 +297,8 @@ static int lpc313x_i2s_hw_params(struct snd_pcm_substream *substream,
 		return -EINVAL;
 	}
 
+	printk("setting clock %d as %d, %d\n",i2s_info.ch_info[dir].chclk, i2s_info.freq, (i2s_info.freq * 32));
+	
 	/* Now setup the selected channel clocks (WS and BCK) */
 	if (lpc313x_chan_clk_enable(i2s_info.ch_info[dir].chclk, i2s_info.freq,
 		(i2s_info.freq * 32)) == 0)
@@ -300,7 +317,6 @@ static int lpc313x_i2s_prepare(struct snd_pcm_substream *substream)
 	return 0;
 }
 
-
 static int lpc313x_i2s_trigger(struct snd_pcm_substream *substream, int cmd)
 {
 	int ret = 0;
@@ -309,14 +325,12 @@ static int lpc313x_i2s_trigger(struct snd_pcm_substream *substream, int cmd)
 	case SNDRV_PCM_TRIGGER_PAUSE_PUSH:
 	case SNDRV_PCM_TRIGGER_PAUSE_RELEASE:
 	case SNDRV_PCM_TRIGGER_STOP:
-	case SNDRV_PCM_TRIGGER_START:
 	case SNDRV_PCM_TRIGGER_SUSPEND:
+	case SNDRV_PCM_TRIGGER_START:
 	case SNDRV_PCM_TRIGGER_RESUME:
 		break;
 
 	default:
-		pr_warning("lpc313x_i2s_triggers: Unsupported cmd: %d\n",
-				cmd);
 		ret = -EINVAL;
 	}
 
@@ -327,19 +341,26 @@ static int lpc313x_i2s_trigger(struct snd_pcm_substream *substream, int cmd)
 static int lpc313x_i2s_suspend(struct platform_device *pdev,
 			       struct snd_soc_dai *cpu_dai)
 {
+	if (!cpu_dai->active)
+		return 0;
+
 	/* Shutdown active clocks */
 	if (i2s_info.ch_info[CH_PLAY].ch_on != 0) {
-		lpc313x_chan_clk_enable(i2s_info.ch_info[CH_PLAY].chclk, 0, 0);
+		lpc313x_chan_clk_enable(i2s_info.ch_info[CH_PLAY].chclk,
+		i2s_info.ch_info[dir].ws_freq, (i2s_info.freq * 32));
 	}
 	if (i2s_info.ch_info[CH_REC].ch_on != 0) {
-		lpc313x_chan_clk_enable(i2s_info.ch_info[CH_REC].chclk, 0, 0);
+		lpc313x_chan_clk_enable(i2s_info.ch_info[CH_REC].chclk,
+		i2s_info.ch_info[dir].ws_freq, (i2s_info.freq * 32));
+	{
 	}
 
-	/* Disable I2S register access clock */
-	cgu_clk_en_dis(CGU_SB_I2S_CFG_PCLK_ID, 0);
-	cgu_clk_en_dis(CGU_SB_EDGE_DET_PCLK_ID, 0);
-	/* shutdown main clocks */
-	lpc313x_main_clk_rate(0);
+	/* Shutdown I2S register access */
+	if ((i2s_info.initialized != 0) {
+		/* Disable I2S register access clock */
+		cgu_clk_en_dis(CGU_SB_I2S_CFG_PCLK_ID, 0);
+		cgu_clk_en_dis(CGU_SB_EDGE_DET_PCLK_ID, 0);
+	}
 
 	return 0;
 }
@@ -347,20 +368,22 @@ static int lpc313x_i2s_suspend(struct platform_device *pdev,
 static int lpc313x_i2s_resume(struct platform_device *pdev,
 			      struct snd_soc_dai *cpu_dai)
 {
-	/* resume main clocks */
-	lpc313x_main_clk_rate(i2s_info.freq);
-	/* Enable I2S register access clock */
-	cgu_clk_en_dis(CGU_SB_I2S_CFG_PCLK_ID, 1);
-	cgu_clk_en_dis(CGU_SB_EDGE_DET_PCLK_ID, 1);
+	if (!cpu_dai->active)
+		return 0;
 
-	/* resume active clocks */
+	/* Shutdown I2S register access */
+	if ((i2s_info.initialized != 0) {
+		/* Enable I2S register access clock */
+		cgu_clk_en_dis(CGU_SB_I2S_CFG_PCLK_ID, 1);
+		cgu_clk_en_dis(CGU_SB_EDGE_DET_PCLK_ID, 1);
+	}
+
+	/* Shutdown active clocks */
 	if (i2s_info.ch_info[CH_PLAY].ch_on != 0) {
-		lpc313x_chan_clk_enable(i2s_info.ch_info[CH_PLAY].chclk,
-		i2s_info.ch_info[CH_PLAY].ws_freq, (i2s_info.freq * 32));
+		lpc313x_chan_clk_enable(i2s_info.ch_info[CH_PLAY].chclk, 0, 0);
 	}
 	if (i2s_info.ch_info[CH_REC].ch_on != 0) {
-		lpc313x_chan_clk_enable(i2s_info.ch_info[CH_REC].chclk,
-		i2s_info.ch_info[CH_REC].ws_freq, (i2s_info.freq * 32));
+		lpc313x_chan_clk_enable(i2s_info.ch_info[CH_REC].chclk, 0, 0);
 	}
 
 	return 0;

@@ -36,7 +36,6 @@
 #include <linux/slab.h>
 #include <linux/clk.h>
 #include <linux/cpufreq.h>
-#include <linux/dma-mapping.h>
 
 #include <linux/mtd/mtd.h>
 #include <linux/mtd/nand.h>
@@ -51,18 +50,6 @@
 #include <mach/gpio.h>
 #include <mach/cgu.h>
 #include <mach/board.h>
-/* for time being use arch specific DMA framework
- * instead of generic framework
- * */
-#include <mach/dma.h>
-
-/*  Enable DMA transfer for better throughput
- * */
-#define USE_DMA
-
-/* Maximum number of DMA descritpors in SG table
- * */
-#define NAND_DMA_MAX_DESC 4
 
 /* Register access macros */
 #define nand_readl(reg)		__raw_readl(&NAND_##reg)
@@ -96,13 +83,6 @@ struct lpc313x_nand_info {
 	struct device *dev;
 	u32 nandconfig;
 	int current_cs;
-#ifdef USE_DMA
-	int	dma_chn;
-	dma_addr_t sg_dma;
-	dma_sg_ll_t *sg_cpu;
-	wait_queue_head_t dma_waitq;
-	volatile u32 dmapending;
-#endif
 	int irq;
 	wait_queue_head_t irq_waitq;
 	volatile u32 intspending;
@@ -127,12 +107,6 @@ static const u32 nand_buff_wr_mask[2] = {NAND_NANDIRQSTATUS1_WR_RAM0,
 /* Decode buffer addresses */
 static const void *nand_buff_addr[2] = {
 	(void *) &NAND_BUFFER_ADRESS, (void *) (&NAND_BUFFER_ADRESS + 256)};
-
-#ifdef USE_DMA
-/* Decode buffer physical addresses */
-static const u32 nand_buff_phys_addr[2] = {
-	IO_NAND_BUF_PHYS, (IO_NAND_BUF_PHYS + 0x400)};
-#endif
 
 /*
  *
@@ -242,102 +216,6 @@ static struct nand_bbt_descr lpc313x_largepage_flashbased = {
 	.pattern = scan_ff_pattern
 };
 
-#ifdef USE_DMA
-/*
- * DMA transfer callback function
- * @ chn: Channel number
- * @ type: Interrupt type
- * @ arg: Function argument
- */
-static void lpc313x_nand_dma_irq(int chn, dma_irq_type_t type,
-		void *arg)
-{
-	unsigned int psrc, pdst, plen, pcfg, pena, pcnt;
-	struct lpc313x_nand_info *host = (struct lpc313x_nand_info *)arg;
-
-	/* SG Table ended */
-	if (type == DMA_IRQ_FINISHED)
-	{
-		/* Flag event and wakeup */
-		host->dmapending = 1;
-		wake_up(&host->dma_waitq);
-	}
-	else if (type == DMA_IRQS_ABORT)
-	{
-		/* DMA data abort - this might not be a
-		   error for this channel. Ignore */
-	}
-
-	return;
-}
-
-/*
- * DMA Scatter Gather transfer function
- * mtd : Pointer to mtd_info structure
- * chip : Pointer to nand_chip structure
- * bufrdy : SRAM buffer index
- * pay_load : Pay load buffer physical address
- * oob_data : OOB data buffer physical address
- * rd : read flag (1: read operation 0: write operation)
- */
-static void lpc313x_nand_dma_sg_tfr(struct mtd_info *mtd,
-		struct nand_chip *chip, int bufrdy,	u32 pay_load, u32 oob_data, int rd)
-{
-	struct lpc313x_nand_mtd *nmtd;
-	struct lpc313x_nand_info *host;
-	int eccsize = chip->ecc.size;
-	int oob_size = rd ? chip->ecc.bytes : OOB_FREE_OFFSET;
-
-	nmtd = chip->priv;
-	host = nmtd->host;
-
-	/* SG entry to transfer pay load */
-	host->sg_cpu[0].setup.src_address = rd ? nand_buff_phys_addr[bufrdy] :
-			pay_load;
-	host->sg_cpu[0].setup.dest_address = rd ? pay_load :
-			nand_buff_phys_addr[bufrdy];
-	host->sg_cpu[0].setup.trans_length = (eccsize >> 2) - 1;
-	host->sg_cpu[0].setup.cfg = DMA_CFG_CMP_CH_EN |
-			DMA_CFG_CMP_CH_NR(host->dma_chn) | DMA_CFG_TX_WORD;
-	host->sg_cpu[0].next_entry = host->sg_dma + sizeof(dma_sg_ll_t);
-
-	/* SG entry to transfer OOB data */
-	host->sg_cpu[1].setup.src_address = rd ? (nand_buff_phys_addr[bufrdy] +
-			eccsize) : oob_data;
-	host->sg_cpu[1].setup.dest_address = rd ? oob_data :
-			(nand_buff_phys_addr[bufrdy] + eccsize);
-	host->sg_cpu[1].setup.trans_length = (oob_size >> 2) - 1;
-	host->sg_cpu[1].setup.cfg = DMA_CFG_TX_WORD;
-	host->sg_cpu[1].next_entry = 0;
-
-	/* Program the SG channel */
-	dma_prog_sg_channel(host->dma_chn, host->sg_dma);
-
-	/* Enable FINISHED interrupt */
-	dma_set_irq_mask(host->dma_chn, 1, 0);
-	dma_set_irq_mask((host->dma_chn - 1), 1, 0);
-
-	/* Set counter to 0 */
-	dma_write_counter((host->dma_chn - 1), 0);
-
-	/* Start the transfer */
-	host->dmapending = 0;
-	dma_start_channel(host->dma_chn);
-
-	/* Wait for FINISHED interrupt */
-	wait_event(host->dma_waitq, host->dmapending);
-
-	/* Mask all the interrupts for the channel */
-	dma_set_irq_mask(host->dma_chn, 1, 1);
-	dma_set_irq_mask((host->dma_chn - 1), 1, 1);
-
-	/* Stop the channel */
-	dma_stop_channel(host->dma_chn);
-
-	return;
-}
-#endif
-
 /*
  *
  * NAND controller hardware support functions
@@ -352,7 +230,7 @@ static void lpc313x_nand_clocks_disen(int en) {
 	cgu_clk_en_dis(CGU_SB_NANDFLASH_NAND_CLK_ID, en);
 	cgu_clk_en_dis(CGU_SB_NANDFLASH_PCLK_ID, en);
 
-	/* Needed for LPC3143/54 chips only */
+	/* Needed for LPC315x series only */
 	cgu_clk_en_dis(CGU_SB_NANDFLASH_AES_CLK_ID, en);
 }
 
@@ -799,11 +677,6 @@ static int lpc313x_nand_read_page_syndrome(struct mtd_info *mtd, struct nand_chi
 	int eccsteps = chip->ecc.steps;
 	uint8_t *p = buf;
 	uint8_t *oob = chip->oob_poi;
-#ifdef USE_DMA
-	int use_dma = 0;
-	dma_addr_t pmapped = 0, oobmapped = 0;
-	u32 p1 = 0, oob1 = 0;
-#endif
 
 #if !defined(STATUS_POLLING)
 	struct lpc313x_nand_mtd *nmtd;
@@ -811,27 +684,6 @@ static int lpc313x_nand_read_page_syndrome(struct mtd_info *mtd, struct nand_chi
 
 	nmtd = chip->priv;
 	host = nmtd->host;
-#endif
-
-#ifdef USE_DMA
-	/* Map DMA buffer, if kmalloced buffer */
-	if (likely((void *) p < high_memory)) {
-		/* Get DMA mappings for buffers */
-		pmapped = dma_map_single(host->dev, (void *) p,
-							(eccsize * eccsteps), DMA_FROM_DEVICE);
-		oobmapped = dma_map_single(host->dev, (void *) oob,
-							(eccbytes * eccsteps), DMA_FROM_DEVICE);
-		if ((dma_mapping_error(host->dev, pmapped)) ||
-				(dma_mapping_error(host->dev, oobmapped)))
-		{
-			use_dma = 0;
-		}
-		else {
-			p1 = pmapped;
-			oob1 = oobmapped;
-			use_dma = 1;
-		}
-	}
 #endif
 
 	for (i = eccsteps; i > 0; i--) {
@@ -847,29 +699,13 @@ static int lpc313x_nand_read_page_syndrome(struct mtd_info *mtd, struct nand_chi
 		/* Read current buffer while next buffer is loading */
 		if (bufrdy >= 0) {
 
-#ifdef USE_DMA
-			/* If DMA mapping succesful, use DMA for transfer.
-			 * Else use memcpy for transfer
-			 * */
-			if(use_dma) {
-				/* Read payload & oob using DMA */
-				lpc313x_nand_dma_sg_tfr(mtd, chip, bufrdy, p1, oob1, 1);
+			/* Read payload portion of the transfer */
+			memcpy((void *)p, nand_buff_addr[bufrdy], eccsize);
+			p += eccsize;
 
-				/* Update buffers offsets */
-				p1 += eccsize;
-				oob1 += eccbytes;
-			}
-			else
-#endif
-			{
-				/* Read payload portion of the transfer */
-				memcpy((void *)p, nand_buff_addr[bufrdy], eccsize);
-				p += eccsize;
-
-				/* Read OOB data portion of the transfer */
-				memcpy((void *)oob, nand_buff_addr[bufrdy] + eccsize, eccbytes);
-				oob += eccbytes;
-			}
+			/* Read OOB data portion of the transfer */
+			memcpy((void *)oob, nand_buff_addr[bufrdy] + eccsize, eccbytes);
+			oob += eccbytes;
 		}
 
 #if defined(STATUS_POLLING)
@@ -887,26 +723,11 @@ static int lpc313x_nand_read_page_syndrome(struct mtd_info *mtd, struct nand_chi
 		chip->ecc.correct(mtd, p, oob, NULL);
 	}
 
-#ifdef USE_DMA
-	if(use_dma) {
-		/* Transfer payload & oob using DMA */
-		lpc313x_nand_dma_sg_tfr(mtd, chip, bufrdy, p1, oob1, 1);
+	/* Read payload portion of the transfer */
+	memcpy((void *)p, nand_buff_addr[bufrdy], eccsize);
 
-		/* Unmap DMA mappings */
-		dma_unmap_single(host->dev, pmapped, (eccsize * eccsteps),
-					DMA_FROM_DEVICE);
-		dma_unmap_single(host->dev, oobmapped, (eccbytes * eccsteps),
-					DMA_FROM_DEVICE);
-	}
-	else
-#endif
-	{
-		/* Read payload portion of the transfer */
-		memcpy((void *)p, nand_buff_addr[bufrdy], eccsize);
-
-		/* Read OOB data portion of the transfer */
-		memcpy((void *)oob, nand_buff_addr[bufrdy] + eccsize, eccbytes);
-	}
+	/* Read OOB data portion of the transfer */
+	memcpy((void *)oob, nand_buff_addr[bufrdy] + eccsize, eccbytes);
 
 	/* Disable all interrupts */
 	lpc313x_nand_int_dis(~0);
@@ -962,11 +783,6 @@ static void lpc313x_nand_write_page_syndrome(struct mtd_info *mtd,
 	int eccsteps = chip->ecc.steps;
 	const uint8_t *p = buf;
 	uint8_t *oob = chip->oob_poi;
-#ifdef USE_DMA
-	dma_addr_t pmapped, oobmapped;
-	u32 p1 = 0, oob1 = 0;
-	int use_dma = 0;
-#endif
 
 #if !defined(STATUS_POLLING)
 	struct lpc313x_nand_mtd *nmtd;
@@ -976,51 +792,14 @@ static void lpc313x_nand_write_page_syndrome(struct mtd_info *mtd,
 	host = nmtd->host;
 #endif
 
-#ifdef USE_DMA
-	/* Map DMA buffer, if kmalloced buffer */
-	if (likely((void *) p < high_memory)) {
-		/* Get DMA mappings for buffers */
-		pmapped = dma_map_single(host->dev, (void *) p,
-							(eccsize * eccsteps), DMA_TO_DEVICE);
-		oobmapped = dma_map_single(host->dev, (void *) oob,
-							(eccbytes * eccsteps), DMA_TO_DEVICE);
-		if ((dma_mapping_error(host->dev, pmapped)) ||
-				(dma_mapping_error(host->dev, oobmapped)))
-		{
-			use_dma = 0;
-		}
-		else {
-			p1 = pmapped;
-			oob1 = oobmapped;
-			use_dma = 1;
-		}
-	}
-#endif
-
 	/* Clear all current statuses */
 	lpc313x_nand_int_clear(~0);
-#ifdef USE_DMA
-	/* If DMA mapping succesful, use DMA for transfer.
-	 * Else use memcpy for transfer
-	 * */
-	if(use_dma) {
-		/* Transfer pay load & OOB using DMA */
-		lpc313x_nand_dma_sg_tfr(mtd, chip, bufrdy, p1, oob1, 0);
 
-		/* Update buffer offsets */
-		p1 += eccsize;
-		oob1 += eccbytes;
-	}
-	else
-#endif
-	{
-		/* Copy payload and OOB data to the buffer */
-		memcpy((void *) nand_buff_addr[bufrdy], p, eccsize);
-		memcpy((void *) nand_buff_addr[bufrdy] + eccsize, oob, OOB_FREE_OFFSET);
-		p += eccsize;
-		oob += eccbytes;
-	}
-
+	/* Copy payload and OOB data to the buffer */
+	memcpy((void *) nand_buff_addr[bufrdy], p, eccsize);
+	memcpy((void *) nand_buff_addr[bufrdy] + eccsize, oob, OOB_FREE_OFFSET);
+	p += eccsize;
+	oob += eccbytes;
 	while(!((nand_readl(IRQSTATUSRAW1)) & nand_buff_enc_mask[bufrdy]));
 
 	for (i = eccsteps; i > 0; i--) {
@@ -1038,27 +817,10 @@ static void lpc313x_nand_write_page_syndrome(struct mtd_info *mtd,
 		/* Copy next payload and OOB data to the buffer while current
 		   buffer is transferring */
 		if (i > 1) {
-
-#ifdef USE_DMA
-			/* If DMA mapping succesful, use DMA for transfer.
-			 * Else use memcpy for transfer
-			 * */
-			if(use_dma) {
-				/* Transfer pay load & OOB using DMA */
-				lpc313x_nand_dma_sg_tfr(mtd, chip, bufrdy, p1, oob1, 0);
-
-				/* Update buffer offsets */
-				p1 += eccsize;
-				oob1 += eccbytes;
-			}
-			else
-#endif
-			{
-				memcpy((void *) nand_buff_addr[bufrdy], p, eccsize);
-				memcpy((void *) nand_buff_addr[bufrdy] + eccsize, oob, OOB_FREE_OFFSET);
-				p += eccsize;
-				oob += eccbytes;
-			}
+			memcpy((void *) nand_buff_addr[bufrdy], p, eccsize);
+			memcpy((void *) nand_buff_addr[bufrdy] + eccsize, oob, OOB_FREE_OFFSET);
+			p += eccsize;
+			oob += eccbytes;
 			while(!((nand_readl(IRQSTATUSRAW1)) & nand_buff_enc_mask[bufrdy]));
 		}
 
@@ -1076,16 +838,6 @@ static void lpc313x_nand_write_page_syndrome(struct mtd_info *mtd,
 	i = mtd->oobsize - (oob - chip->oob_poi);
 	if (i)
 		chip->write_buf(mtd, oob, i);
-
-#ifdef USE_DMA
-	/* Unmap DMA mappings */
-	if(use_dma) {
-		dma_unmap_single(host->dev, pmapped, (eccsize * eccsteps),
-				DMA_TO_DEVICE);
-		dma_unmap_single(host->dev, oobmapped, (eccbytes * eccsteps),
-				DMA_TO_DEVICE);
-	}
-#endif
 
 	/* Disable all interrupts */
 	lpc313x_nand_int_dis(~0);
@@ -1293,7 +1045,7 @@ static int lpc313x_nand_probe(struct platform_device *pdev) {
 		goto exit_error;
 	}
 
-	memset(host, 0, sizeof(*host));
+	memzero(host, sizeof(*host));
 	/* Register driver data with platform */
 	platform_set_drvdata(pdev, host);
 
@@ -1361,29 +1113,7 @@ static int lpc313x_nand_probe(struct platform_device *pdev) {
 		err = -ENOMEM;
 		goto exit_error2;
 	}
-	memset(host->mtds, 0, mtdsize);
-
-#ifdef USE_DMA
-	/* Allocate sg channel for DMA transfers */
-	host->dma_chn = dma_request_sg_channel("NAND", 0, 0,
-			lpc313x_nand_dma_irq, host, 0);
-	if(host->dma_chn < 0) {
-		dev_err(&pdev->dev, "Failed to allocate DMA SG channel\n");
-		err = host->dma_chn;
-		goto exit_error3;
-	}
-
-	/* Allocate memory for SG Table */
-	host->sg_cpu = dma_alloc_coherent(&pdev->dev,
-			NAND_DMA_MAX_DESC * sizeof(dma_sg_ll_t), &host->sg_dma, GFP_KERNEL);
-	if (host->sg_cpu == NULL) {
-		dev_err(&pdev->dev, "could not alloc dma memory\n");
-		goto exit_error4;
-	}
-
-	/* Initialise DMA wait queue */
-	init_waitqueue_head(&host->dma_waitq);
-#endif
+	memzero(host->mtds, mtdsize);
 
 	/* Add MTDs and partitions */
 	for (i = 0; i < host->platform->nr_devices; i++) {
@@ -1417,17 +1147,6 @@ static int lpc313x_nand_probe(struct platform_device *pdev) {
 	}
 
 	return 0;
-
-#ifdef USE_DMA
-exit_error4:
-	/* Release sg channel */
-	dma_release_sg_channel(host->dma_chn);
-
-exit_error3:
-	/* Release memory */
-	if(host->mtds != NULL)
-		kfree(host->mtds);
-#endif
 
 exit_error2:
 	/* Release IRQ */
@@ -1465,15 +1184,6 @@ static int lpc313x_nand_remove(struct platform_device *pdev) {
 	/* Disable clocks for NAND Controller */
 	lpc313x_nand_clocks_disen(1);
 
-#ifdef USE_DMA
-	/* Release memory allocated for SG table */
-	dma_free_coherent(host->dev, NAND_DMA_MAX_DESC * sizeof(dma_sg_ll_t),
-			host->sg_cpu, host->sg_dma);
-
-	/* Release sg channel */
-	dma_release_sg_channel(host->dma_chn);
-#endif
-
 	/* Release IRQ */
 	free_irq(host->irq, pdev);
 
@@ -1486,16 +1196,27 @@ static int lpc313x_nand_remove(struct platform_device *pdev) {
 #if defined(CONFIG_PM)
 static int lpc313x_nand_resume(struct platform_device *pdev)
 {
+#if defined (CONFIG_MTD_LPC313X_NAND_CLOCK_STOP)
 	/* Enables clocks for NAND Controller */
 	lpc313x_nand_clocks_disen(1);
+
+	/* Reset NAND controller */
+	cgu_soft_reset_module(NANDFLASH_CTRL_NAND_RESET_N_SOFT);
+	cgu_soft_reset_module(NANDFLASH_CTRL_ECC_RESET_N_SOFT);
+
+	/* Needed for LPC315x series only */
+	cgu_soft_reset_module(NANDFLASH_CTRL_AES_RESET_N_SOFT);
+#endif
 
 	return 0;
 }
 
 static int lpc313x_nand_suspend(struct platform_device *pdev, pm_message_t pm)
 {
+#if defined (CONFIG_MTD_LPC313X_NAND_CLOCK_STOP)
 	/* Disable clocks for NAND Controller */
 	lpc313x_nand_clocks_disen(0);
+#endif
 
 	return 0;
 }

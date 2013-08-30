@@ -36,14 +36,14 @@
 #include <sound/soc.h>
 #include <sound/soc-dapm.h>
 
-#include "../codecs/uda1380.h"
+#include "../codecs/fhsanalog1.h"
 #include "lpc313x-pcm.h"
 #include "lpc313x-i2s.h"
 #include "lpc313x-i2s-clocking.h"
 
-#define SND_MODNAME "lpc313x_uda1380"
+#define SND_MODNAME "lpc313x_fhsanalog1"
 
-static int ea3131_uda1380_hw_params(struct snd_pcm_substream *substream,
+static int fhs3143_fhsanalog1_hw_params(struct snd_pcm_substream *substream,
 				    struct snd_pcm_hw_params *params)
 {
 	struct snd_soc_pcm_runtime *rtd = substream->private_data;
@@ -83,110 +83,94 @@ static int ea3131_uda1380_hw_params(struct snd_pcm_substream *substream,
 	return 0;
 }
 
-static struct snd_soc_ops ea3131_uda1380_ops = {
-	.hw_params = ea3131_uda1380_hw_params,
+static struct snd_soc_ops fhs3143_fhsanalog1_ops = {
+	.hw_params = fhs3143_fhsanalog1_hw_params,
 };
 
-static const struct snd_soc_dapm_widget ea3131_dapm_widgets[] = {
-	SND_SOC_DAPM_HP("Headphone Jack", NULL),
+static const struct snd_soc_dapm_widget fhs3143_dapm_widgets[] = {
 	SND_SOC_DAPM_LINE("Line Out", NULL),
-	SND_SOC_DAPM_MIC("Mic Jack", NULL),
 	SND_SOC_DAPM_LINE("Line In", NULL),
 };
 
 static const struct snd_soc_dapm_route intercon[] = {
-	/* Headphone connected to VOUTRHP, VOUTLHP */
-	{"Headphone Jack", NULL, "VOUTRHP"},
-	{"Headphone Jack", NULL, "VOUTLHP"},
 
 	/* Line Out connected to VOUTR, VOUTL */
 	{"Line Out", NULL, "VOUTR"},
 	{"Line Out", NULL, "VOUTL"},
 
-	/* Mic connected to VINM */
-	{"VINM", NULL, "Mic Jack"},
-
 	/* Line In connected to VINR, VINL */
-	{"VINL", NULL, "Line In"},
-	{"VINR", NULL, "Line In"},
+	{"VINL", NULL, "Microphone In Voice"},
+	{"VINR", NULL, "Microphone In Guitar"},
 };
 
-static int ea3131_uda1380_init(struct snd_soc_codec *codec)
+static int fhs3143_fhsanalog1_init(struct snd_soc_codec *codec)
 {
+	
+#if 0
 	/* Add widgets */
-	snd_soc_dapm_new_controls(codec, ea3131_dapm_widgets,
-				  ARRAY_SIZE(ea3131_dapm_widgets));
+	
+	snd_soc_dapm_new_controls(codec, fhs3143_dapm_widgets,
+				  ARRAY_SIZE(fhs3143_dapm_widgets));
 
 	/* Set up audio path audio_map */
 	snd_soc_dapm_add_routes(codec, intercon, ARRAY_SIZE(intercon));
 
 	/* Always connected pins */
-	snd_soc_dapm_enable_pin(codec, "Headphone Jack");
 	snd_soc_dapm_enable_pin(codec, "Line Out");
-	snd_soc_dapm_enable_pin(codec, "Mic Jack");
 	snd_soc_dapm_enable_pin(codec, "Line In");
 
 	snd_soc_dapm_sync(codec);
-
+#endif
 	return 0;
 }
 
-static struct snd_soc_dai_link ea3131_uda1380_dai[] = {
+static struct snd_soc_dai_link fhs3143_fhsanalog1_dai[] = {
 	{
-		.name = "UDA1380",
-		.stream_name = "UDA1380",
+		.name = "FHSANALOG1",
+		.stream_name = "FHSANALOG1",
 		.cpu_dai = &lpc313x_i2s_dai,
-		.codec_dai = &uda1380_dai[UDA1380_DAI_DUPLEX],
-		.init = ea3131_uda1380_init,
-		.ops = &ea3131_uda1380_ops,
+		.codec_dai = &fhsanalog1_dai,
+		.init = fhs3143_fhsanalog1_init,
+		.ops = &fhs3143_fhsanalog1_ops,
 	},
 };
 
-static struct snd_soc_machine snd_soc_machine_ea3131 = {
-	.name = "LPC313X_I2S_UDA1380",
-	.dai_link = &ea3131_uda1380_dai[0],
-	.num_links = ARRAY_SIZE(ea3131_uda1380_dai),
+static struct snd_soc_machine snd_soc_machine_fhs3143 = {
+	.name = "LPC313X_I2S_FHSANALOG1",
+	.dai_link = &fhs3143_fhsanalog1_dai[0],
+	.num_links = ARRAY_SIZE(fhs3143_fhsanalog1_dai),
 };
 
-static struct uda1380_setup_data ea3131_uda1380_setup = {
-	.i2c_address = 0x1a,
-	.dac_clk = UDA1380_DAC_CLK_SYSCLK,
-#if defined (CONFIG_SND_I2C1_CHANNEL_UDA1380)
-	.i2c_bus = 1
-#else
-	.i2c_bus = 0
-#endif
-};
 
-static struct snd_soc_device ea3131_uda1380_snd_devdata = {
-	.machine = &snd_soc_machine_ea3131,
+
+static struct snd_soc_device fhs3143_fhsanalog1_snd_devdata = {
+	.machine = &snd_soc_machine_fhs3143,
 	.platform = &lpc313x_soc_platform,
-	.codec_dev = &soc_codec_dev_uda1380,
-	.codec_data = &ea3131_uda1380_setup,
+	.codec_dev = &soc_codec_dev_fhsanalog1
 };
 
-static struct platform_device *ea3131_snd_device;
-static int __init ea3131_asoc_init(void)
+static struct platform_device *fhs3143_snd_device;
+static int __init fhs3143_asoc_init(void)
 {
 	int ret = 0;
 
 	/*
 	 * Create and register platform device
 	 */
-	ea3131_snd_device = platform_device_alloc("soc-audio", 0);
-	if (ea3131_snd_device == NULL) {
+	fhs3143_snd_device = platform_device_alloc("soc-audio", 0);
+	if (fhs3143_snd_device == NULL) {
 		return -ENOMEM;
 	}
 
-	platform_set_drvdata(ea3131_snd_device, &ea3131_uda1380_snd_devdata);
-	ea3131_uda1380_snd_devdata.dev = &ea3131_snd_device->dev;
+	platform_set_drvdata(fhs3143_snd_device, &fhs3143_fhsanalog1_snd_devdata);
+	fhs3143_fhsanalog1_snd_devdata.dev = &fhs3143_snd_device->dev;
 
 	/*
 	 * Enable CODEC clock first or I2C will fail to the CODEC
 	 */
 	lpc313x_main_clk_rate(48000);
 
-	ret = platform_device_add(ea3131_snd_device);
+	ret = platform_device_add(fhs3143_snd_device);
 	if (ret) {
 		pr_warning("%s: platform_device_add failed (%d)\n",
 			   SND_MODNAME, ret);
@@ -196,26 +180,26 @@ static int __init ea3131_asoc_init(void)
 	return 0;
 
 err_device_add:
-	if (ea3131_snd_device != NULL) {
-		platform_device_put(ea3131_snd_device);
+	if (fhs3143_snd_device != NULL) {
+		platform_device_put(fhs3143_snd_device);
 		lpc313x_main_clk_rate(0);
-		ea3131_snd_device = NULL;
+		fhs3143_snd_device = NULL;
 	}
 
 	return ret;
 }
 
-static void __exit ea3131_asoc_exit(void)
+static void __exit fhs3143_asoc_exit(void)
 {
-	platform_device_unregister(ea3131_snd_device);
+	platform_device_unregister(fhs3143_snd_device);
 	lpc313x_main_clk_rate(0);
-	ea3131_snd_device = NULL;
+	fhs3143_snd_device = NULL;
 }
 
-module_init(ea3131_asoc_init);
-module_exit(ea3131_asoc_exit);
+module_init(fhs3143_asoc_init);
+module_exit(fhs3143_asoc_exit);
 
-MODULE_AUTHOR("Kevin Wells <kevin.wells@nxp.com>");
-MODULE_DESCRIPTION("ASoC machine driver for LPC313X/UDA1380");
+MODULE_AUTHOR("Miguel Angel Ajo <miguelangel@nbee.es>");
+MODULE_DESCRIPTION("ASoC machine driver for LPC313X/FHSANALOG1");
 MODULE_LICENSE("GPL");
 

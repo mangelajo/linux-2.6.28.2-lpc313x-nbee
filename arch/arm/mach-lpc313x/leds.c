@@ -31,17 +31,17 @@
 
 static inline void val3153_led_on(unsigned int led)
 {
-	gpio_set_value(led, 0);
+	lpc31xx_gpio_set_value(led, 0);
 }
 
 static inline void val3153_led_off(unsigned int led)
 {
-	gpio_set_value(led, 1);
+	lpc31xx_gpio_set_value(led, 1);
 }
 
 static inline void val3153_led_toggle(unsigned int led)
 {
-	unsigned long is_off = gpio_get_value(led);
+	unsigned long is_off = lpc31xx_gpio_get_value(led);
 	if (is_off)
 		val3153_led_on(led);
 	else

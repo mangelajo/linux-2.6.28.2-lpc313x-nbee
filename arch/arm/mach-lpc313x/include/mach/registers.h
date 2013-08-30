@@ -24,7 +24,14 @@
 #ifndef __ASM_ARCH_REGISTERS_H
 #define __ASM_ARCH_REGISTERS_H
 
+/* ----- Includes */
 
+/* ----- Constants*/
+
+
+/* ----- Prototypes */
+
+	/* Registers */
 /***********************************************************************
  * Interrupt controller register definitions
  **********************************************************************/
@@ -273,15 +280,8 @@
 #define I2S_FIFO_ALL_MASK         0x3FF
 
 /***********************************************************************
- * ADC_REG register definitions
- **********************************************************************/
-#define ADC_CON_REG            __REG (ADC_PHYS + 0x20)
-
-/***********************************************************************
  * SYS_REG register definitions
  **********************************************************************/
-#define SYS_RNG_OSC_CFG        __REG (SYS_PHYS + 0x14)
-#define SYS_ADC_PD             __REG (SYS_PHYS + 0x18)
 #define SYS_SDMMC_DELAYMODES   __REG (SYS_PHYS + 0x2C)
 #define SYS_USB_ATX_PLL_PD_REG __REG (SYS_PHYS + 0x30)
 #define SYS_USB_OTG_CFG        __REG (SYS_PHYS + 0x34)
@@ -296,7 +296,6 @@
 #define SYS_MPMC_DELAY      __REG (SYS_PHYS + 0x68)
 #define SYS_MPMC_WTD_DEL0   __REG (SYS_PHYS + 0x6C)
 #define SYS_MPMC_WTD_DEL1   __REG (SYS_PHYS + 0x70)
-#define SYS_MPMC_TESTMODE0  __REG (SYS_PHYS + 0x78)
 #define SYS_REMAP_ADDR      __REG (SYS_PHYS + 0x84)
 #define SYS_MUX_LCD_EBI     __REG (SYS_PHYS + 0x90)
 #define SYS_MUX_GPIO_MCI    __REG (SYS_PHYS + 0x94)
@@ -651,6 +650,7 @@
 #define NAND_AES_AHB_EN             _BIT(7)
 #define NAND_AES_AHB_DCRYPT_RAM1    _BIT(1)
 #define NAND_AES_AHB_DCRYPT_RAM0    _BIT(0)
+
 
 
 

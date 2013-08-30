@@ -148,7 +148,7 @@ typedef enum _EVT_TYPE_
   EVT_MCI_DAT_7,
   EVT_MCI_CMD,
   EVT_MCI_CLK,
-  EVT_USB_VBUS,
+  EVT_USB_VBUS1,
   EVT_usb_otg_ahb_needclk,
   EVT_usb_atx_pll_lock,
   EVT_usb_otg_vbus_pwr_en,

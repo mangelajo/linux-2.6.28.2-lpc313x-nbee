@@ -811,8 +811,6 @@ static int smsc95xx_reset(struct usbnet *dev)
 		return ret;
 	}
 
-	smsc95xx_init_mac_address(dev);
-
 	ret = smsc95xx_set_mac_address(dev);
 	if (ret < 0)
 		return ret;
@@ -939,6 +937,17 @@ static int smsc95xx_reset(struct usbnet *dev)
 	if (netif_msg_ifup(dev))
 		devdbg(dev, "ID_REV = 0x%08x", read_buf);
 
+	/* Configure GPIO pins as LED outputs */
+	write_buf = LED_GPIO_CFG_SPD_LED | LED_GPIO_CFG_LNK_LED |
+		LED_GPIO_CFG_FDX_LED;
+	ret = smsc95xx_write_reg(dev, LED_GPIO_CFG, write_buf);
+	if (ret < 0) {
+		devwarn(dev, "Failed to write LED_GPIO_CFG register, ret=%d",
+			ret);
+		return ret;
+	}
+
+
 	/* Init Tx */
 	write_buf = 0;
 	ret = smsc95xx_write_reg(dev, FLOW, write_buf);
@@ -1030,6 +1039,9 @@ static int smsc95xx_bind(struct usbnet *dev, struct usb_interface *intf)
 	spin_lock_init(&pdata->mac_cr_lock);
 
 	pdata->use_rx_csum = DEFAULT_RX_CSUM_ENABLE;
+
+	smsc95xx_init_mac_address(dev);
+
 
 	/* Init all registers */
 	ret = smsc95xx_reset(dev);
@@ -1192,6 +1204,11 @@ static const struct usb_device_id products[] = {
 	{
 		/* SMSC9500 USB Ethernet Device */
 		USB_DEVICE(0x0424, 0x9500),
+		.driver_info = (unsigned long) &smsc95xx_info,
+	},
+	{
+		/* SMSC9512/9514 USB Hub & Ethernet Device */
+		USB_DEVICE(0x0424, 0xec00),
 		.driver_info = (unsigned long) &smsc95xx_info,
 	},
 	{ },		/* END */

@@ -200,4 +200,10 @@ config CRYPTO_DEV_IXP4XX
 	help
 	  Driver for the IXP4xx NPE crypto engine.
 
+config CRYPTO_DEV_LPC3143_AES
+        bool "Driver for LPC3143 AES-128-CBC decryption engine"
+        depends on ARCH_LPC313X
+
+
+
 endif # CRYPTO_HW

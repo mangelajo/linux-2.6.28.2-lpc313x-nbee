@@ -40,13 +40,6 @@
 #define PCA9532_REG_LS0  0x6
 #define LED_REG(led) ((led>>2)+PCA9532_REG_LS0)
 #define LED_NUM(led) (led & 0x3)
-/* LED states */
-#define PCA9532_LED_OFF     0
-#define PCA9532_LED_ON      1
-#define PCA9532_LED_PWM0    2
-#define PCA9532_LED_PWM1    3
-
-
 
 #define ldev_to_led(c)       container_of(c, struct pca9532_led, ldev)
 
@@ -56,8 +49,8 @@ struct pca9532_data {
 	struct input_dev    *idev;
 	u32 init;
 };
+u8 g_leds[4] = { 0,};
 
-static u8 g_leds[4] = { 0, 0, 0, 0};
 static struct pca9532_data g_pca_data;
 
 
@@ -71,41 +64,39 @@ static void pca9532_setgpio(int led_id, int state)
 
 	if (data->init == 0) {
 		/* save the setting */
-		g_leds[led_id >> 2] &= ~(0x3 << LED_NUM(led_id)*2);
-		g_leds[led_id >> 2] |= ((state & 0x3) << LED_NUM(led_id)*2);
+		if (state == 0) 
+			g_leds[led_id >> 2] |= (1 << LED_NUM(led_id)*2);
+		else
+			g_leds[led_id >> 2] &= ~(1 << LED_NUM(led_id)*2);
 
 		return;
 	}
 
 	mutex_lock(&data->update_lock);
-	reg = (u8)(g_leds[led_id >> 2] & 0xFF);
-	/* zero led bits */
-	reg = reg & ~(0x3 << LED_NUM(led_id)*2);
-	/* set the new value */
-	reg = reg | ((state & 0x3) << LED_NUM(led_id)*2);
-
 #if 0
 	ret = i2c_smbus_read_byte_data(client, LED_REG(led_id));
 #else
 	ret = g_leds[led_id >> 2];
 #endif
-	printk ("pca9532: r: 0x%x w: 0x%x reg:0x%x\n", (u8)(ret & 0xFF), reg, LED_REG(led_id));
-	  
-	if (ret != reg)
-		i2c_smbus_write_byte_data(client, LED_REG(led_id), reg);
+	printk ("pca9532: r: 0x%08x reg:0x%08x\n", ret, LED_REG(led_id));
+	if (ret >= 0) {
+		reg = (u8)(ret & 0xFF);
+		/* zero led bits */
+		reg = reg & ~(0x3 << LED_NUM(led_id)*2);
+		/* set the new value */
+		if (state == 0)
+			reg = reg | (1 << LED_NUM(led_id)*2);
 
-	g_leds[led_id >> 2] = reg;
-
+		printk ("pca9532: r: 0x%x w: 0x%x reg:0x%x\n", (u8)(ret & 0xFF), reg, LED_REG(led_id));
+		  i2c_smbus_write_byte_data(client, LED_REG(led_id), reg);
+		g_leds[led_id >> 2] = reg;
+	}
 	mutex_unlock(&data->update_lock);
 }
 
 
 static int pca9532_configure(struct i2c_client *client,	struct pca9532_data *data)
 {
-	/* set PWM0 for 50-50 duty cycle with longest period*/
-	i2c_smbus_write_byte_data(client, PCA9532_REG_PSC(0), 0xFF);
-	i2c_smbus_write_byte_data(client, PCA9532_REG_PWM(0), 0x80);
-
 	i2c_smbus_write_byte_data(client, PCA9532_REG_LS0, g_leds[0]);
 	i2c_smbus_write_byte_data(client, PCA9532_REG_LS0 + 1, g_leds[1]);
 	i2c_smbus_write_byte_data(client, PCA9532_REG_LS0 + 2, g_leds[2]);
@@ -124,17 +115,27 @@ static void ea313x_leds_event(led_event_t evt)
 	local_irq_save(flags);
 
 	switch(evt) {
+	case led_start:		/* System startup */
+		//pca9532_setgpio(START_STOP_LED, 1);
+		break;
+
+	case led_stop:		/* System stop / suspend */
+		//pca9532_setgpio(START_STOP_LED, 0);
+		break;
+
 #ifdef CONFIG_LEDS_TIMER
 	case led_timer:		/* Every 50 timer ticks */
 		{
-			unsigned long is_off = gpio_get_value(GPIO_GPIO2);
+			unsigned long is_off = lpc31xx_gpio_get_value(GPIO_GPIO2);
 			if (is_off)
-				gpio_set_value(GPIO_GPIO2, 0);
+				lpc31xx_gpio_set_value(GPIO_GPIO2, 0);
 			else
-				gpio_set_value(GPIO_GPIO2, 1);
+				lpc31xx_gpio_set_value(GPIO_GPIO2, 1);
 		}
 		break;
 #endif
+
+
 	default:
 		break;
 	}
@@ -142,19 +143,6 @@ static void ea313x_leds_event(led_event_t evt)
 	local_irq_restore(flags);
 }
 
-static int pca9532_suspend(struct i2c_client * client, pm_message_t mesg)
-{
-	/* System stop / suspend */
-	pca9532_setgpio(START_STOP_LED, PCA9532_LED_PWM0);
-	return 0;
-}
-
-static int pca9532_resume(struct i2c_client * client)
-{
-	/* System resume */
-	pca9532_setgpio(START_STOP_LED, PCA9532_LED_OFF);
-	return 0;
-}
 
 static int pca9532_probe(struct i2c_client *client,
 	const struct i2c_device_id *id)
@@ -203,8 +191,6 @@ static struct i2c_driver pca9532_driver = {
 	.id_table = pca9532_id,
 	.probe  = pca9532_probe,
 	.remove = pca9532_remove,
-	.suspend = pca9532_suspend,
-	.resume = pca9532_resume,
 };
 
 static int __init pca9532_init(void)
@@ -219,13 +205,15 @@ static void __exit pca9532_exit(void)
 
 void lpc313x_vbus_power(int enable)
 {
+#if 0
 	if (enable) {
 		printk (KERN_INFO "enabling USB host vbus_power\n");
-		pca9532_setgpio(VBUS_PWR_EN, PCA9532_LED_ON);
+		pca9532_setgpio(VBUS_PWR_EN, 0);
 	} else {
 		printk (KERN_INFO "disabling USB host vbus_power\n");
-		pca9532_setgpio(VBUS_PWR_EN, PCA9532_LED_OFF);
+		pca9532_setgpio(VBUS_PWR_EN, 1);
 	}
+#endif
 }
 __initcall(pca9532_init);
 

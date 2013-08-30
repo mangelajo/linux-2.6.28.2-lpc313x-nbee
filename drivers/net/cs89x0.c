@@ -196,7 +196,7 @@ static unsigned int cs8900_irq_map[] = {CIRRUS_DEFAULT_IRQ, 0, 0, 0};
 #elif defined(CONFIG_MACH_VAL3153)
 #include <asm/irq.h>
 #include <mach/hardware.h>
-#define CS8900_IOBARRIER	(*(volatile u16 __force*) io_p2v(INTC_PHYS))
+#define CS8900_IOBARRIER	(*(volatile u16 __force*) io_p2v(EXT_SRAM0_PHYS))
 #define CIRRUS_DEFAULT_BASE	io_p2v(EXT_SRAM1_PHYS + 0x10000)	/* = Physical address 0x20030000 */
 static unsigned int netcard_portlist[] __used __initdata = {CIRRUS_DEFAULT_BASE, 0};
 static unsigned int cs8900_irq_map[] = {IRQ_CS8900_ETH_INT, 0, 0, 0};

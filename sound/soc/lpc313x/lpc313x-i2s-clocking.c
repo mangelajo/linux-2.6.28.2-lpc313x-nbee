@@ -45,6 +45,7 @@
  */
 
 #include <linux/io.h>
+#include <linux/spinlock.h>
 
 #include <mach/cgu.h>
 #include <mach/board.h>
@@ -279,6 +280,7 @@ static void lpc313x_ch_clk_disen(enum i2s_supp_clks chclk, int en)
 	int i = 0;
 	P_CGU_CLOCK_ID_T pclks = (P_CGU_CLOCK_ID_T) clkarray[chclk];
 
+
 	while (pclks[i] != CGU_SB_INVALID_CLK_ID)
 	{
 		cgu_clk_en_dis(pclks[i], en);
@@ -290,8 +292,12 @@ static void lpc313x_ch_clk_disen(enum i2s_supp_clks chclk, int en)
  * Sets up the channel bit clock to generate a rate as close as possible
  * to the target clkrate frequency
  */
+ 
+spinlock_t lpc313x_set_ch_freq_lock;
+ 
 static u32 lpc313x_set_ch_freq(enum i2s_supp_clks chclk, u32 ws_freq, u32 bit_freq)
 {
+	unsigned long flags;
 	CGU_FDIV_SETUP_T ch_div;
 
 	if (ws_freq == 0)
@@ -321,7 +327,16 @@ static u32 lpc313x_set_ch_freq(enum i2s_supp_clks chclk, u32 ws_freq, u32 bit_fr
 		if ((chclk == CLK_TX_0) || (chclk == CLK_TX_1)) {
 			cgu_fdiv_config(18, ch_div, 1);
 		}
-
+		
+		/* reset all clocks to keep them within codec hold/setup times for WS */
+	  spin_lock_irqsave(&lpc313x_set_ch_freq_lock,flags); // avoid unwanted interruptions 	
+		cgu_fdiv_reset(17); /* WS     */
+		asm("NOP");					/* leave some cycles between */		
+		cgu_fdiv_reset(18); /* TX CLK */
+		asm("NOP");         /* leave some cycles between */
+		cgu_fdiv_reset(20); /* RX CLK */
+		spin_unlock_irqrestore(&lpc313x_set_ch_freq_lock,flags);
+			
 		/* Enable channel clock */
 		lpc313x_ch_clk_disen(chclk, 1);
 	}
@@ -336,15 +351,8 @@ static u32 lpc313x_set_ch_freq(enum i2s_supp_clks chclk, u32 ws_freq, u32 bit_fr
  */
 u32 lpc313x_main_clk_rate(u32 freq)
 {
-	u32 ret = 0;
 	/* Compute and set proper divider */
-	ret = lpc313x_set_codec_freq(freq);
-#if defined (CONFIG_SND_DEBUG_VERBOSE)
-	pr_info("LPC313x ASOC main clock : %d (%d)\n", 
-		i2s_clk_state.target_codec_rate,
-		i2s_clk_state.real_fs_codec_rate);
-#endif
-	return ret;
+	return lpc313x_set_codec_freq(freq);
 }
 
 /*

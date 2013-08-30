@@ -24,9 +24,6 @@
 #include <linux/cpufreq.h>
 #include <mach/hardware.h>
 #include <linux/err.h>
-#include <linux/debugfs.h>
-#include <linux/seq_file.h>
-
 #include <mach/cgu.h>
 #include <asm/io.h>
 #include <asm/div64.h>
@@ -34,7 +31,7 @@
 /***********************************************************************
 * CGU driver package data
 ***********************************************************************/
-static u32 g_clkin_freq[CGU_FIN_SELECT_MAX];
+u32 g_clkin_freq[CGU_FIN_SELECT_MAX];
 
 /***********************************************************************
 * CGU driver private functions
@@ -51,8 +48,10 @@ static u32 cgu_fdiv_num_bits(unsigned int i)
 {
 	u32 x = 0, y = 16;
 
-	for (; y > 0; y = y >> 1) {
-		if (i >> y) {
+	for (; y > 0; y = y >> 1)
+	{
+		if (i >> y)
+		{
 			x += y;
 			i = i >> y;
 		}
@@ -64,7 +63,9 @@ static u32 cgu_fdiv_num_bits(unsigned int i)
 	return x;
 }
 
-static inline u32 f_mult_m_div_n(u32 f_in, u32 m, u32 n)
+static inline u32 f_mult_m_div_n(u32 f_in,
+						u32 m,
+						u32 n)
 {
 	u32 temp;
 	union {
@@ -98,19 +99,15 @@ static unsigned int pl550_m(int x)
 {
 	int m = 1;
 
-	if ((x<0) || (x>0x40000))
-		return 0;
-	if (x == 0x18003)
-		return 1;
-	if (x == 0x10003)
-		return 2;
+	if ((x<0) || (x>0x40000)) return 0;
+	if (x == 0x18003)         return 1;
+	if (x == 0x10003)         return 2;
 
 	while (x!=0x4000) {
 		int new = (x & 1)^((x >> 1) & 1);
 		x = (x >> 1) | (new << 14);
 		m++;
-		if (m > 0x8000) 
-			return 0;
+		if (m > 0x8000) return 0;
 	}
 	return m+1;
 }
@@ -122,19 +119,15 @@ static unsigned int pl550_n( int x)
 {
 	int n = 1;
 
-	if ((x<0) || (x>0x400)) 
-		return 0;
-	if ( x == 0x302)
-		return 1;
-	if ( x == 0x202)
-		return 2;
+	if ((x<0) || (x>0x400)) return 0;
+	if ( x == 0x302)	    return 1;
+	if ( x == 0x202)	    return 2;
 
 	while (x != 0x80) {
 		int new = (((x&1) ^ ((x>>2)&1)) ^ ((x>>3)&1)) ^ ((x>>4)&1);
 		x = (x>>1) | (new<<7);
 		n++;
-		if (n > 255)
-			return 0;
+		if (n > 255) return 0;
 	}
 
 	return n+1;
@@ -147,19 +140,15 @@ static unsigned int pl550_p(int x)
 {
 	int p = 1;
 
-	if ((x<0) || (x>0x62))
-		return 0;
-	if (x==0x62)
-		return 1;
-	if (x==0x42)
-		return 2;
+	if ((x<0) || (x>0x62)) return 0;
+	if (x==0x62)	       return 1;
+	if (x==0x42)	       return 2;
 
 	while (x!=0x10) {
 		int new = (x&1)^((x>>2)&1);
 		x = (x>>1)|(new<<4);
 		p++;
-		if (p>31)
-			return 0;
+		if (p>31) return 0;
 	}
 
 	return p+1;
@@ -227,51 +216,74 @@ void cgu_ClkId2DomainId(CGU_CLOCK_ID_T clkid, CGU_DOMAIN_ID_T* pDomainId,
 
 	/*    1. Get the domain ID */
 
-	if (clkid <= CGU_SYS_LAST) {
+	if (clkid <= CGU_SYS_LAST)
+	{
 		*pDomainId = CGU_SB_SYS_BASE_ID;
 		fracdiv_base = CGU_SB_BASE0_FDIV_LOW_ID;
 
-	} else if (clkid <= CGU_AHB0APB0_LAST) {
+	}
+	else 	if (clkid <= CGU_AHB0APB0_LAST)
+	{
 		*pDomainId = CGU_SB_AHB0_APB0_BASE_ID;
 		fracdiv_base = CGU_SB_BASE1_FDIV_LOW_ID;
 
-	} else 	if (clkid <= CGU_AHB0APB1_LAST) {
+	}
+	else 	if (clkid <= CGU_AHB0APB1_LAST)
+	{
 		*pDomainId = CGU_SB_AHB0_APB1_BASE_ID;
 		fracdiv_base = CGU_SB_BASE2_FDIV_LOW_ID;
 
-	} else 	if (clkid <= CGU_AHB0APB2_LAST) {
+	}
+	else 	if (clkid <= CGU_AHB0APB2_LAST)
+	{
 		*pDomainId = CGU_SB_AHB0_APB2_BASE_ID;
 		fracdiv_base = CGU_SB_BASE3_FDIV_LOW_ID;
 
-	} else 	if (clkid <= CGU_AHB0APB3_LAST) {
+	}
+	else 	if (clkid <= CGU_AHB0APB3_LAST)
+	{
 		*pDomainId = CGU_SB_AHB0_APB3_BASE_ID;
 		fracdiv_base = CGU_SB_BASE4_FDIV_LOW_ID;
 
-	} else 	if (clkid == CGU_PCM_LAST) {
+	}
+	else 	if (clkid == CGU_PCM_LAST)
+	{
 		*pDomainId = CGU_SB_IPINT_BASE_ID;
 		fracdiv_base = CGU_SB_BASE5_FDIV_LOW_ID;
 
-	} else 	if (clkid == CGU_UART_LAST) {
+	}
+	else 	if (clkid == CGU_UART_LAST)
+	{
 		*pDomainId = CGU_SB_UARTCLK_BASE_ID;
 		fracdiv_base = CGU_SB_BASE6_FDIV_LOW_ID;
 
-	} else 	if (clkid <= CGU_CLK1024FS_LAST) {
+	}
+	else 	if (clkid <= CGU_CLK1024FS_LAST)
+	{
 		*pDomainId = CGU_SB_CLK1024FS_BASE_ID;
 		fracdiv_base = CGU_SB_BASE7_FDIV_LOW_ID;
 
-	} else 	if (clkid == CGU_I2SRX_BCK0_LAST) {
+	}
+	else 	if (clkid == CGU_I2SRX_BCK0_LAST)
+	{
 		*pDomainId = CGU_SB_I2SRX_BCK0_BASE_ID;
 		fracdiv_base = CGU_INVALID_ID;
 
-	} else 	if (clkid == CGU_I2SRX_BCK1_LAST) {
+	}
+	else 	if (clkid == CGU_I2SRX_BCK1_LAST)
+	{
 		*pDomainId = CGU_SB_I2SRX_BCK1_BASE_ID;
 		fracdiv_base = CGU_INVALID_ID;
 
-	} else 	if (clkid <= CGU_SPI_LAST) {
+	}
+	else 	if (clkid <= CGU_SPI_LAST)
+	{
 		*pDomainId = CGU_SB_SPI_CLK_BASE_ID;
 		fracdiv_base = CGU_SB_BASE10_FDIV_LOW_ID;
 
-	} else {
+	}
+	else
+	{
 		*pDomainId = CGU_SB_SYSCLK_O_BASE_ID;
 		fracdiv_base = CGU_INVALID_ID;
 	}
@@ -281,14 +293,16 @@ void cgu_ClkId2DomainId(CGU_CLOCK_ID_T clkid, CGU_DOMAIN_ID_T* pDomainId,
 	/* read the clocks ESR to get the fractional divider */
 	esrIndex = cgu_clkid2esrid(clkid);
 
-	if (CGU_INVALID_ID != esrIndex) {
+	if (CGU_INVALID_ID != esrIndex)
+	{
 		/* read the clocks ESR to get the fractional divider */
 		esrReg = CGU_SB->clk_esr[esrIndex];
 
 		/* A clock may not be connected to any sub-domain and it might be
 		connected directly to domain. This is also a valid combination. So,
 		errror should not be returned */
-		if (esrReg & CGU_SB_ESR_ENABLE) {
+		if (esrReg & CGU_SB_ESR_ENABLE)
+		{
 			*pSubdomainId = CGU_SB_ESR_SEL_GET(esrReg) + fracdiv_base;
 		}
 	}
@@ -314,7 +328,8 @@ u32 cgu_fdiv_config(u32 fdId, CGU_FDIV_SETUP_T fdivCfg, u32 enable)
 	maxw = (maddw > msubw) ? maddw : msubw;
 	fdWidth = CGU_SB_BASE0_FDIV0_W;
 
-	if (fdId == CGU_SB_BASE7_FDIV_LOW_ID) {
+	if (fdId == CGU_SB_BASE7_FDIV_LOW_ID)
+	{
 		/* for Frac divider 17 the bit width is 13 */
 		fdWidth = CGU_SB_BASE7_FDIV0_W;
 	}
@@ -328,9 +343,16 @@ u32 cgu_fdiv_config(u32 fdId, CGU_FDIV_SETUP_T fdivCfg, u32 enable)
 	/* check whther 50% duty cycle is needed for this divider*/
 	if (fdivCfg.stretch)
 		conf |= CGU_SB_FDC_STRETCH;
+	
+	
+	/* reset the fractional divider */
+	CGU_SB->base_fdc[fdId] = conf | CGU_SB_FDC_RESET;
+	CGU_SB->base_fdc[fdId] = conf;
+	
 	/* check whehter to enable the divider immediately */
 	if (enable)
 		conf |= CGU_SB_FDC_RUN;
+
 
 	/* finally configure the divider*/
 	CGU_SB->base_fdc[fdId] = conf;
@@ -338,6 +360,14 @@ u32 cgu_fdiv_config(u32 fdId, CGU_FDIV_SETUP_T fdivCfg, u32 enable)
 	return conf;
 }
 
+u32 cgu_fdiv_reset(u32 fdId)
+{
+	u32 conf;
+	
+	conf = CGU_SB->base_fdc[fdId]| CGU_SB_FDC_RESET;
+	CGU_SB->base_fdc[fdId]  = conf;
+	CGU_SB->base_fdc[fdId]  = conf&(~CGU_SB_FDC_RESET); /* remove the reset (and small delay) */
+}
 /***********************************************************************
 * CGU driver public functions
 ***********************************************************************/
@@ -363,17 +393,22 @@ void cgu_set_base_freq(CGU_DOMAIN_ID_T baseid, u32 fin_sel)
 	/* Switch configuration register*/
 	baseSCR = CGU_SB->base_scr[baseid] & ~CGU_SB_SCR_FS_MASK;
 	/* If fs1 is currently enabled set refId to fs2 and enable fs2*/
-	if (CGU_SB->base_ssr[baseid] & CGU_SB_SCR_EN1) {
+	if (CGU_SB->base_ssr[baseid] & CGU_SB_SCR_EN1)
+	{
 		/* check if the selcted frequency is same as requested. If not switch.*/
-		if (CGU_SB->base_fs1[baseid] != fin_sel) {
+		if (CGU_SB->base_fs1[baseid] != fin_sel)
+		{
 			CGU_SB->base_fs2[baseid] = fin_sel;
 
 			/* Don't touch stop bit in SCR register*/
 			CGU_SB->base_scr[baseid] = baseSCR | CGU_SB_SCR_EN2;
 		}
-	} else {
+	}
+	else
+	{
 		/* check if the selcted frequency is same as requested. If not switch.*/
-		if (CGU_SB->base_fs2[baseid] != fin_sel) {
+		if (CGU_SB->base_fs2[baseid] != fin_sel)
+		{
 			CGU_SB->base_fs1[baseid] = fin_sel;
 
 			/* Don't touch stop bit in SCR register*/
@@ -396,9 +431,11 @@ void cgu_hpll_config(CGU_HPLL_ID_T pllid, CGU_HPLL_SETUP_T* pllsetup)
 	/**********************************************************
 	* switch domains connected to HPLL to FFAST automatically
 	***********************************************************/
-	for (domainId = CGU_SB_BASE_FIRST; domainId < CGU_SB_NR_BASE; domainId++) {
+	for (domainId = CGU_SB_BASE_FIRST; domainId < CGU_SB_NR_BASE; domainId++)
+	{
 		if (CGU_SB_SSR_FS_GET(CGU_SB->base_ssr[domainId]) ==
-			(CGU_FIN_SELECT_HPPLL0 + pllid)) {
+			(CGU_FIN_SELECT_HPPLL0 + pllid))
+		{
 			/* switch reference clock in to FFAST */
 			cgu_set_base_freq(domainId, CGU_FIN_SELECT_FFAST);
 			/* store the domain id to switch back to HPLL */
@@ -416,43 +453,41 @@ void cgu_hpll_config(CGU_HPLL_ID_T pllid, CGU_HPLL_SETUP_T* pllsetup)
 	*/
 	hppll->mode = CGU_HPLL_MODE_PD;
 
-	/* check if pllsetup is valid if not just switch off pll */
-	if (pllsetup != NULL) {
+	/* Select fin */
+	hppll->fin_select = pllsetup->fin_select;
 
-		/* Select fin */
-		hppll->fin_select = pllsetup->fin_select;
+	/* M divider */
+	hppll->mdec = pllsetup->mdec & CGU_HPLL_MDEC_MASK;
 
-		/* M divider */
-		hppll->mdec = pllsetup->mdec & CGU_HPLL_MDEC_MASK;
+	/* N divider */
+	hppll->ndec = pllsetup->ndec & CGU_HPLL_NDEC_MSK;
 
-		/* N divider */
-		hppll->ndec = pllsetup->ndec & CGU_HPLL_NDEC_MSK;
+	/* P divider */
+	hppll->pdec = pllsetup->pdec & CGU_HPLL_PDEC_MSK;
 
-		/* P divider */
-		hppll->pdec = pllsetup->pdec & CGU_HPLL_PDEC_MSK;
+	/* Set bandwidth */
+	hppll->selr = pllsetup->selr;
+	hppll->seli = pllsetup->seli;
+	hppll->selp = pllsetup->selp;
 
-		/* Set bandwidth */
-		hppll->selr = pllsetup->selr;
-		hppll->seli = pllsetup->seli;
-		hppll->selp = pllsetup->selp;
+	/* Power up pll */
+	hppll->mode = (pllsetup->mode & ~CGU_HPLL_MODE_PD) | CGU_HPLL_MODE_CLKEN;
 
-		/* Power up pll */
-		hppll->mode = (pllsetup->mode & ~CGU_HPLL_MODE_PD) | CGU_HPLL_MODE_CLKEN;
+	/* store the estimated freq in driver data for future clk calcs */
+	g_clkin_freq[CGU_FIN_SELECT_HPPLL0 + pllid] = pllsetup->freq;
 
-		/* store the estimated freq in driver data for future clk calcs */
-		g_clkin_freq[CGU_FIN_SELECT_HPPLL0 + pllid] = pllsetup->freq;
+	/* wait for PLL to lock */
+	while ((hppll->status & CGU_HPLL_STATUS_LOCK) == 0);
 
-		/* wait for PLL to lock */
-		while ((hppll->status & CGU_HPLL_STATUS_LOCK) == 0);
-
-		/**********************************************************
-		* switch domains back to HPLL
-		***********************************************************/
-		for (domainId = CGU_SB_BASE_FIRST; domainId < CGU_SB_NR_BASE; domainId++) {
-			if (switched_domains & _BIT(domainId)) {
-				/* switch reference clock in to HPLL */
-				cgu_set_base_freq(domainId, CGU_FIN_SELECT_HPPLL0 + pllid);
-			}
+	/**********************************************************
+	* switch domains back to HPLL
+	***********************************************************/
+	for (domainId = CGU_SB_BASE_FIRST; domainId < CGU_SB_NR_BASE; domainId++)
+	{
+		if (switched_domains & _BIT(domainId))
+		{
+			/* switch reference clock in to HPLL */
+			cgu_set_base_freq(domainId, CGU_FIN_SELECT_HPPLL0 + pllid);
 		}
 	}
 
@@ -478,9 +513,13 @@ void cgu_clk_set_exten(CGU_CLOCK_ID_T clkid, u32 enable)
 	case CGU_SB_PCM_CLK_IP_ID:
 	case CGU_SB_PWM_PCLK_REGS_ID:
 		if (enable)
+		{
 			CGU_SB->clk_pcr[clkid] |= CGU_SB_PCR_EXTEN_EN;
+		}
 		else
+		{
 			CGU_SB->clk_pcr[clkid] &= ~CGU_SB_PCR_EXTEN_EN;
+		}
 		break;
 		/* force disable for the following clocks */
 	case CGU_SB_I2C0_PCLK_ID:
@@ -530,33 +569,42 @@ u32 cgu_get_clk_freq(CGU_CLOCK_ID_T clkid)
 
 	/* direct connection  has no fraction divider*/
 	if (subDomainId == CGU_INVALID_ID)
+	{
 		return freq;
-
+	}
 	/* read frac div control register value */
 	fdcVal = CGU_SB->base_fdc[subDomainId];
 
-	if (fdcVal & CGU_SB_FDC_RUN)  { /* Is the fracdiv enabled ?*/
+	if (fdcVal & CGU_SB_FDC_RUN) /* Is the fracdiv enabled ?*/
+	{
 		/* Yes, so reverse calculation of madd and msub */
-		int msub, madd;
+		{
+			int msub, madd;
 
-		if (subDomainId != CGU_SB_BASE7_FDIV_LOW_ID) {
-			msub = CGU_SB_FDC_MSUB_GET(fdcVal);
-			madd = CGU_SB_FDC_MADD_GET(fdcVal);
-		} else {
-			msub = CGU_SB_FDC17_MSUB_GET(fdcVal);
-			madd = CGU_SB_FDC17_MADD_GET(fdcVal);
-		}
+			if (subDomainId != CGU_SB_BASE7_FDIV_LOW_ID)
+			{
+				msub = CGU_SB_FDC_MSUB_GET(fdcVal);
+				madd = CGU_SB_FDC_MADD_GET(fdcVal);
+			}
+			else
+			{
+				msub = CGU_SB_FDC17_MSUB_GET(fdcVal);
+				madd = CGU_SB_FDC17_MADD_GET(fdcVal);
+			}
 
-		/* remove trailing zeros */
-		while (!(msub & 1)  && !(madd & 1)) {
-			madd = madd >> 1;
-			msub = msub >> 1;
+			/* remove trailing zeros */
+			while (!(msub & 1)  && !(madd & 1))
+			{
+				madd = madd >> 1;
+				msub = msub >> 1;
+			}
+			/* compute m and n values */
+			n = - msub;
+			m = madd + n;
 		}
-		/* compute m and n values */
-		n = - msub;
-		m = madd + n;
 		/* check m and n are non-zero values */
-		if ((n == 0) || (m == 0)) {
+		if ((n == 0) || (m == 0))
+		{
 			return 0;
 		}
 		/* calculate the frequency based on m and n values */
@@ -564,7 +612,7 @@ u32 cgu_get_clk_freq(CGU_CLOCK_ID_T clkid)
 	}
 	/* else There is no fractional divider in the clocks path */
 
-	//printk(KERN_INFO "CGU: Get clock id:%d freq:%d\n", clkid, freq);
+	printk(KERN_INFO "CGU: Get clock id:%d freq:%d\n", clkid, freq);
 
 	return  freq;
 }
@@ -581,7 +629,8 @@ void cgu_set_subdomain_freq(CGU_CLOCK_ID_T clkid, CGU_FDIV_SETUP_T fdiv_cfg)
 	cgu_ClkId2DomainId(clkid, &domainId, &subDomainId);
 
 	/* direct connection  has no fraction divider*/
-	if (subDomainId != CGU_INVALID_ID) {
+	if (subDomainId != CGU_INVALID_ID)
+	{
 		/* store base freq */
 		base_freq = CGU_SB_SSR_FS_GET(CGU_SB->base_ssr[domainId]);
 		/* switch domain to FFAST */
@@ -589,13 +638,15 @@ void cgu_set_subdomain_freq(CGU_CLOCK_ID_T clkid, CGU_FDIV_SETUP_T fdiv_cfg)
 		/* check if the domain has a BCR*/
 		bcrId = cgu_DomainId2bcrid(domainId);
 		/* disable all BCRs */
-		if (bcrId != CGU_INVALID_ID) {
+		if (bcrId != CGU_INVALID_ID)
+		{
 			CGU_SB->base_bcr[bcrId] = 0;
 		}
 		/* change fractional divider */
 		cgu_fdiv_config(subDomainId, fdiv_cfg, 1);
 		/* enable BCRs */
-		if (bcrId != CGU_INVALID_ID) {
+		if (bcrId != CGU_INVALID_ID)
+		{
 			CGU_SB->base_bcr[bcrId] = CGU_SB_BCR_FD_RUN;
 		}
 		/* switch domain to original base frequency */
@@ -682,86 +733,13 @@ u32 cgu_get_pll_freq(CGU_HPLL_ID_T pll_id, u32 infreq)
 	return ofreq;
 }
 
-#if defined (CONFIG_DEBUG_FS)
-/*
- * The debugfs stuff below is mostly optimized away when
- * CONFIG_DEBUG_FS is not set.
- */
-static int lpc313x_cgu_clocks_show(struct seq_file *s, void *v)
-{
-	u32 clk_id = CGU_SYS_FIRST;
-	u32 end_id = (CGU_SYSCLK_O_LAST + 1);
-	char* str[2] = { "OFF", " ON"}; 
-
-	while (clk_id < end_id) {
-		seq_printf (s, "clock[%02d] %s(PSR)/%s(PCR) : %d\r\n", clk_id, 
-			str[(CGU_SB->clk_psr[clk_id] & 0x1)], 
-			str[(CGU_SB->clk_pcr[clk_id] & 0x1)], 
-			cgu_get_clk_freq(clk_id));
-		clk_id++;
-	}
-
-	return 0;
-}
-
-static int lpc313x_cgu_clocks_open(struct inode *inode, struct file *file)
-{
-	return single_open(file, lpc313x_cgu_clocks_show, inode->i_private);
-}
-
-static const struct file_operations lpc313x_cgu_clocks_fops = {
-	.owner		= THIS_MODULE,
-	.open		= lpc313x_cgu_clocks_open,
-	.read		= seq_read,
-	.llseek		= seq_lseek,
-	.release	= single_release,
-};
-
-static void lpc313x_cgu_init_debugfs(void)
-{
-	struct dentry		*node;
-
-	node = debugfs_create_file("cgu_clks", S_IRUSR, NULL, NULL,
-			&lpc313x_cgu_clocks_fops);
-	if (IS_ERR(node))
-		printk("cgu_init: failed to initialize debugfs for CGU\n");
-
-	return;
-}
-#else
-static void lpc313x_cgu_init_debugfs(void) {}
-#endif
 /***********************************************************************
 * Initialize CGU data structure with PLL frequency passed by the boot 
 * loader.
 **********************************************************************/
 int __init cgu_init(char *str)
 {
-	int i, j;
-	u32 flags;
-	/* disable all non-essential clocks, enabel main clocks and wakeup
-	 * enables.
-	 */
-	for(i = 0; i < CGU_SB_NR_CLK; i++) {
 
-		if (i < 32) {
-			flags = CGU_WKE_CLKS_0_31;
-			j = 0;
-		} else	if (i < 64) {
-			flags = CGU_WKE_CLKS_32_63;
-			j = 32;
-		} else if (i < 96) {
-			flags = CGU_WKE_CLKS_64_92;
-			j = 64;
-		}
-
-		if (flags & _BIT((i - j))) {
-			CGU_SB->clk_pcr[i] |= CGU_SB_PCR_WAKE_EN |
-					CGU_SB_PCR_RUN | CGU_SB_PCR_AUTO;
-		} else {
-			CGU_SB->clk_pcr[i] &= ~(CGU_SB_PCR_WAKE_EN | CGU_SB_PCR_RUN);
-		}
-	}
 	g_clkin_freq[0] = FFAST_CLOCK;
 	g_clkin_freq[1] = 0;
 	g_clkin_freq[2] = 0;
@@ -770,8 +748,6 @@ int __init cgu_init(char *str)
 	g_clkin_freq[5] = cgu_get_pll_freq(CGU_HPLL0_ID, FFAST_CLOCK);
 	g_clkin_freq[6] = cgu_get_pll_freq(CGU_HPLL1_ID, FFAST_CLOCK);
  	printk(/*KERN_INFO*/ "cgu_init pll set at %d\n", g_clkin_freq[6]);
-	
-	lpc313x_cgu_init_debugfs();
 
 	return 0;
 }
@@ -783,5 +759,4 @@ EXPORT_SYMBOL(cgu_get_clk_freq);
 EXPORT_SYMBOL(cgu_get_pll_freq);
 EXPORT_SYMBOL(cgu_set_subdomain_freq);
 EXPORT_SYMBOL(cgu_hpll_config);
-//EXPORT_SYMBOL(cgu_clk_set_exten);
-
+EXPORT_SYMBOL(cgu_clk_set_exten);

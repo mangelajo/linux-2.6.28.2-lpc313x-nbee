@@ -34,14 +34,14 @@
 #include "lpc313x-pcm.h"
 
 #define SND_NAME "lpc313x-audio"
-static u64 lpc313x_pcm_dmamask = DMA_BIT_MASK(32);
+static u64 lpc313x_pcm_dmamask = DMA_32BIT_MASK;
 
 #if defined (CONFIG_SND_USE_DMA_LINKLIST)
 /* The DMA controller in the LPC31XX has limited interrupt support
    for DMA. A timer is used instead to update the current buffer
    position */
 #define MIN_PERIODS 8
-#define MAX_PERIODS 32
+#define MAX_PERIODS 250
 #define DMA_LIST_SIZE (MAX_PERIODS * sizeof(dma_sg_ll_t))
 #define MIN_BYTES_PERIOD 2048
 #define MAX_BYTES_PERIOD 4096
@@ -73,7 +73,6 @@ static const struct snd_pcm_hardware lpc313x_pcm_hardware = {
 	.info = (SNDRV_PCM_INFO_MMAP |
 		 SNDRV_PCM_INFO_MMAP_VALID |
 		 SNDRV_PCM_INFO_INTERLEAVED |
-		 SNDRV_PCM_INFO_RESUME |
 		 SNDRV_PCM_INFO_BLOCK_TRANSFER),
 	.formats = (SND_SOC_DAIFMT_I2S),
 	.period_bytes_min = MIN_BYTES_PERIOD,
@@ -152,14 +151,8 @@ static int lpc313x_pcm_allocate_dma_buffer(struct snd_pcm *pcm, int stream)
 	dmabuf->dev.type = SNDRV_DMA_TYPE_DEV;
 	dmabuf->dev.dev = pcm->card->dev;
 	dmabuf->private_data = NULL;
-	dmabuf->area = dma_alloc_coherent(pcm->card->dev, size,
-					  &dmabuf->addr, GFP_KERNEL);
-
-	pr_debug("lpc313x-pcm:"
-		"preallocate_dma_buffer: area=%p, addr=%p, size=%d\n",
-		(void *) dmabuf->area,
-		(void *) dmabuf->addr,
-		size);
+	dmabuf->area = dma_alloc_writecombine(pcm->card->dev, size,
+					   &dmabuf->addr, GFP_KERNEL);
 
 	if (!dmabuf->area)
 		return -ENOMEM;
@@ -202,8 +195,7 @@ static int lpc313x_pcm_hw_free(struct snd_pcm_substream *substream)
 		dma_release_sg_channel(prtd->dmach);
 
 		/* Return the linked list area */
-		dma_free_coherent(substream->pcm->card->dev,
-			DMA_LIST_SIZE, prtd->p_sg_cpu, (dma_addr_t)prtd->p_sg_dma);
+		dma_free_coherent(NULL, DMA_LIST_SIZE, prtd->p_sg_cpu, 0);
 #else
 		dma_release_channel((unsigned int) prtd->dmach);
 #endif
@@ -223,7 +215,9 @@ static int lpc313x_pcm_prepare(struct snd_pcm_substream *substream)
 		if (substream->stream == SNDRV_PCM_STREAM_PLAYBACK) {
 #if defined (CONFIG_SND_USE_DMA_LINKLIST)
 			prtd->dmach = dma_request_sg_channel("I2STX",
-				lpc313x_pcm_dma_irq, substream, 0, 0, 0);
+				lpc313x_pcm_dma_irq, substream, 0);
+
+			printk(KERN_CRIT "I2STX DMA: %d\n",prtd->dmach);
 			prtd->dma_cfg_base = DMA_CFG_TX_WORD |
 				DMA_CFG_RD_SLV_NR(0) | DMA_CFG_CMP_CH_EN |
 				DMA_CFG_WR_SLV_NR(TX_DMA_CHCFG) |
@@ -240,7 +234,8 @@ static int lpc313x_pcm_prepare(struct snd_pcm_substream *substream)
 		else {
 #if defined (CONFIG_SND_USE_DMA_LINKLIST)
 			prtd->dmach = dma_request_sg_channel("I2SRX",
-				lpc313x_pcm_dma_irq, substream, 0, 0, 0);
+				lpc313x_pcm_dma_irq, substream, 0);
+			printk(KERN_CRIT "I2SRX DMA: %d\n",prtd->dmach);
 			prtd->dma_cfg_base = DMA_CFG_TX_WORD |
 				DMA_CFG_WR_SLV_NR(0) | DMA_CFG_CMP_CH_EN |
 				DMA_CFG_RD_SLV_NR(RX_DMA_CHCFG) |
@@ -263,11 +258,10 @@ static int lpc313x_pcm_prepare(struct snd_pcm_substream *substream)
 #if defined (CONFIG_SND_USE_DMA_LINKLIST)
 		/* Allocate space for a DMA linked list */
 		prtd->p_sg_cpu = (dma_sg_ll_t *) dma_alloc_coherent(
-			substream->pcm->card->dev, DMA_LIST_SIZE,
+			NULL, DMA_LIST_SIZE,
 			(dma_addr_t *) &prtd->p_sg_dma, GFP_KERNEL);
 
 		if (prtd->p_sg_cpu == NULL) {
-			pr_err("Error allocating DMA sg list\n");
 			dma_release_sg_channel(prtd->dmach);
 			prtd->dmach = -1;
 			return -ENOMEM;
@@ -285,12 +279,12 @@ static int lpc313x_pcm_trigger(struct snd_pcm_substream *substream, int cmd)
 	struct snd_pcm_runtime *rtd = substream->runtime;
 	struct lpc313x_dma_data *prtd = rtd->private_data;
 	int ret = 0;
-
+	unsigned long timeout;
 #if defined (CONFIG_SND_USE_DMA_LINKLIST)
 	int i, tch;
 	u32 addr;
 	dma_sg_ll_t *p_sg_cpuw, *p_sg_dmaw;
-	unsigned long timeout;
+
 
 	if (substream->stream == SNDRV_PCM_STREAM_PLAYBACK) {
 		tch = 0;
@@ -389,8 +383,6 @@ static int lpc313x_pcm_trigger(struct snd_pcm_substream *substream, int cmd)
 		break;
 
 	default:
-		pr_warning("lpc313x_pcm_trigger: Unsupported cmd: %d\n",
-				cmd);
 		ret = -EINVAL;
 	}
 
@@ -516,8 +508,7 @@ static void lpc313x_pcm_free_dma_buffers(struct snd_pcm *pcm)
 		if (!buf->area)
 			continue;
 
-		dma_free_coherent(pcm->card->dev, buf->bytes,
-				  buf->area, buf->addr);
+		dma_free_writecombine(pcm->card->dev, buf->bytes, buf->area, buf->addr);
 
 		buf->area = NULL;
 	}

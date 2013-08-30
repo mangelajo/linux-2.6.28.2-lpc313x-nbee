@@ -9,6 +9,22 @@ config SND_LPC313X_SOC
 config SND_LPC313X_SOC_I2S
         bool
 
+config SND_LPC313X_SOC_I2S_FHS_ANALOG1
+        bool "SoC Audio for FHSANALOG1 board using I2S only"
+        depends on SND_LPC313X_SOC
+        select SND_LPC313X_SOC_I2S
+       	select SND_I2S_RX1_MASTER
+				select SND_I2S_TX1_MASTER
+				select SND_CODEC_FS256
+				select SND_SOC_FHS_ANALOG1
+				
+				
+
+        help
+          Say Y here if you want to add support for SoC audio on
+	  LPC313x with the FHS_ANALO1 CODEC Board. This requires an I2S channel
+	  
+
 config SND_LPC313X_SOC_I2S_UDA1380
         bool "SoC Audio for the UDA1380 CODEC using I2S/I2C"
         depends on SND_LPC313X_SOC

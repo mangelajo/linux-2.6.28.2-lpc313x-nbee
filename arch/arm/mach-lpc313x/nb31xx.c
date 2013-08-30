@@ -3,7 +3,7 @@
  *  Author:	Durgesh Pattamatta
  *  Copyright (C) 2009 NXP semiconductors
  *
- *  ea313x board init routines.
+ *  nb31xx board init routines.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -57,7 +57,7 @@ static int mci_get_cd(u32 slot_id)
 	return lpc31xx_gpio_get_value(GPIO_MI2STX_BCK0);
 }
 
-static irqreturn_t ea313x_mci_detect_interrupt(int irq, void *data)
+static irqreturn_t nb31xx_mci_detect_interrupt(int irq, void *data)
 {
 	struct lpc313x_mci_irq_data	*pdata = data;
 
@@ -87,7 +87,7 @@ static int mci_init(u32 slot_id, irq_handler_t irqhdlr, void *data)
 	irq_data.irq_hdlr = irqhdlr;
 	set_irq_type(irq_data.irq, level);
 	ret = request_irq(irq_data.irq,
-			ea313x_mci_detect_interrupt,
+			nb31xx_mci_detect_interrupt,
 			level,
 			"mmc-cd", 
 			&irq_data);
@@ -131,7 +131,7 @@ static struct resource lpc313x_mci_resources[] = {
 		.flags	= IORESOURCE_IRQ,
 	},
 };
-static struct lpc313x_mci_board ea313x_mci_platform_data = {
+static struct lpc313x_mci_board nb31xx_mci_platform_data = {
 	.num_slots		= 1,
 	.detect_delay_ms	= 250,
 	.init 			= mci_init,
@@ -150,11 +150,47 @@ static struct platform_device	lpc313x_mci_device = {
 	.dev		= {
 		.dma_mask		= &mci_dmamask,
 		.coherent_dma_mask	= 0xffffffff,
-		.platform_data		= &ea313x_mci_platform_data,
+		.platform_data		= &nb31xx_mci_platform_data,
 	},
 	.resource	= lpc313x_mci_resources,
 };
 
+#if defined (CONFIG_FB_ILI9225) 
+static struct resource ili9225_resource[] = {
+	[0] = {
+		.start = EXT_SRAM0_PHYS + 0x00000 + 0x0000,
+		.end   = EXT_SRAM0_PHYS + 0x00000 + 0xffff,
+		.flags = IORESOURCE_MEM,
+	},
+	[1] = {
+		.start = EXT_SRAM0_PHYS + 0x10000 + 0x0000,
+		.end   = EXT_SRAM0_PHYS + 0x10000 + 0xffff,
+		.flags = IORESOURCE_MEM,
+	},
+};
+
+static struct platform_device ili9225_device = {
+	.name          = "ili9225",
+	.id            = 0,
+	.num_resources = ARRAY_SIZE(ili9225_resource),
+	.resource      = ili9225_resource,
+};
+
+static void __init nb_add_device_ili9225(void)
+{
+	MPMC_STCONFIG0 = 0x81;
+	MPMC_STWTWEN0  = 0;
+	MPMC_STWTOEN0  = 0;
+	MPMC_STWTRD0   = 31;
+	MPMC_STWTPG0   = 0;
+	MPMC_STWTWR0   = 3;
+	MPMC_STWTTURN0 = 0;
+
+	platform_device_register(&ili9225_device);
+}
+#else
+static void __init nb_add_device_ili9225(void) {}
+#endif 
 
 #if defined (CONFIG_FB_TLS8301S) 
 static struct resource tls8301s_resource[] = {
@@ -177,7 +213,7 @@ static struct platform_device tls8301s_device = {
 	.resource      = tls8301s_resource,
 };
 
-static void __init ea_add_device_tls8301s(void)
+static void __init nb_add_device_tls8301s(void)
 {
 	MPMC_STCONFIG0 = 0x81;
 	MPMC_STWTWEN0  = 0;
@@ -190,7 +226,7 @@ static void __init ea_add_device_tls8301s(void)
 	platform_device_register(&tls8301s_device);
 }
 #else
-static void __init ea_add_device_tls8301s(void) {}
+static void __init nb_add_device_tls8301s(void) {}
 #endif 
 
 #if defined (CONFIG_FB_SSD1963) 
@@ -214,7 +250,7 @@ static struct platform_device ssd1963_device = {
 	.resource      = ssd1963_resource,
 };
 
-static void __init ea_add_device_ssd1963(void)
+static void __init nb_add_device_ssd1963(void)
 {
 	MPMC_STCONFIG0 = 0x81;
 	MPMC_STWTWEN0  = 0;
@@ -227,7 +263,7 @@ static void __init ea_add_device_ssd1963(void)
 	platform_device_register(&ssd1963_device);
 }
 #else
-static void __init ea_add_device_ssd1963(void) {}
+static void __init nb_add_device_ssd1963(void) {}
 #endif /* CONFIG_SSD1289 */
 
 
@@ -303,7 +339,7 @@ static struct platform_device dm9000_device = {
 		.platform_data	= &dm9000_platdata,
 	}
 };
-static void __init ea_add_device_dm9000(void)
+static void __init nb_add_device_dm9000(void)
 {
 	/*
 	 * Configure Chip-Select 2 on SMC for the DM9000.
@@ -326,11 +362,11 @@ static void __init ea_add_device_dm9000(void)
 	platform_device_register(&dm9000_device);
 }
 #else
-static void __init ea_add_device_dm9000(void) {}
+static void __init nb_add_device_dm9000(void) {}
 #endif /* CONFIG_DM9000 */
 
 
-#if defined (CONFIG_MTD_NAND_LPC313X)
+#if defined (CONFIG_MTD_NAND_LPC313X)|| defined(CONFIG_CRYPTO_DEV_LPC3143_AES)
 static struct resource lpc313x_nand_resources[] = {
 	[0] = {
 		.start  = IO_NAND_PHYS,
@@ -350,8 +386,8 @@ static struct resource lpc313x_nand_resources[] = {
 };
 
 #define BLK_SIZE (2048 * 64)
-static struct mtd_partition ea313x_nand0_partitions[] = {
-	/* The EA3131 board uses the following block scheme:
+static struct mtd_partition nb31xx_nand0_partitions[] = {
+	/* The nb31x1 board uses the following block scheme:
 	128K: Blocks 0   - 0    - LPC31xx info and bad block table
 	384K: Blocks 1   - 3    - Apex bootloader
 	256K: Blocks 4   - 5    - Apex environment
@@ -365,7 +401,7 @@ static struct mtd_partition ea313x_nand0_partitions[] = {
 	},
 };
 
-static struct lpc313x_nand_timing ea313x_nanddev_timing = {
+static struct lpc313x_nand_timing nb31xx_nanddev_timing = {
 	.ns_trsd	= 36,
 	.ns_tals	= 36,
 	.ns_talh	= 12,
@@ -381,25 +417,30 @@ static struct lpc313x_nand_timing ea313x_nanddev_timing = {
 	.ns_twp		= 36
 };
 
-static struct lpc313x_nand_dev_info ea313x_ndev[] = {
+static struct lpc313x_nand_dev_info nb31xx_ndev[] = {
 	{
 		.name		= "nand0",
-		.nr_partitions	= ARRAY_SIZE(ea313x_nand0_partitions),
-		.partitions	= ea313x_nand0_partitions
+		.nr_partitions	= ARRAY_SIZE(nb31xx_nand0_partitions),
+		.partitions	= nb31xx_nand0_partitions
 	}
 };
+static struct platform_device   lpc3143_aes_device = {
+        .name           = "lpc3143_aes",
+        .num_resources  = ARRAY_SIZE(lpc313x_nand_resources),
+        .resource       = lpc313x_nand_resources,
+};
 
-static struct lpc313x_nand_cfg ea313x_plat_nand = {
-	.nr_devices	= ARRAY_SIZE(ea313x_ndev),
-	.devices	= ea313x_ndev,
-	.timing		= &ea313x_nanddev_timing,
+static struct lpc313x_nand_cfg nb31xx_plat_nand = {
+	.nr_devices	= ARRAY_SIZE(nb31xx_ndev),
+	.devices	= nb31xx_ndev,
+	.timing		= &nb31xx_nanddev_timing,
 	.support_16bit	= 0,
 };
 
 static struct platform_device	lpc313x_nand_device = {
 	.name		= "lpc313x_nand",
 	.dev		= {
-				.platform_data	= &ea313x_plat_nand,
+				.platform_data	= &nb31xx_plat_nand,
 	},
 	.num_resources	= ARRAY_SIZE(lpc313x_nand_resources),
 	.resource	= lpc313x_nand_resources,
@@ -540,15 +581,21 @@ arch_initcall(lpc313x_spimtd_register);
 
 static struct platform_device *devices[] __initdata = {
 	&lpc313x_mci_device,
-#if defined (CONFIG_MTD_NAND_LPC313X)
+
+#if defined(CONFIG_CRYPTO_DEV_LPC3143_AES)
+	&lpc3143_aes_device,
+#else
+	#if defined (CONFIG_MTD_NAND_LPC313X)
 	&lpc313x_nand_device,
+	#endif
 #endif
+
 #if defined(CONFIG_SPI_LPC313X)
 	&lpc313x_spi_device,
 #endif
 };
 
-static struct map_desc ea313x_io_desc[] __initdata = {
+static struct map_desc nb31xx_io_desc[] __initdata = {
 	{
 		.virtual	= io_p2v(EXT_SRAM0_PHYS),
 		.pfn		= __phys_to_pfn(EXT_SRAM0_PHYS),
@@ -580,19 +627,10 @@ static struct at24_platform_data at24c02 = {
         .page_size        = 8,
 };
 
-static struct i2c_board_info ea313x_i2c_devices[] __initdata = {
-	{
-			I2C_BOARD_INFO("s35390a", 0x30),
-			
-	},
-	{
-			I2C_BOARD_INFO("pca9532", 0x60),
-
-        },
-	{
-		I2C_BOARD_INFO("24c02", 0x50),
-               	.platform_data        = &at24c02
-	}
+static struct i2c_board_info nb31xx_i2c_devices[] __initdata = {
+	{	I2C_BOARD_INFO("s35390a", 0x30),	},
+	{	I2C_BOARD_INFO("pca9532", 0x60),  },
+	{	I2C_BOARD_INFO("24c02", 0x50),  .platform_data        = &at24c02}
 
 };
 
@@ -600,7 +638,7 @@ static struct i2c_board_info ea313x_i2c_devices[] __initdata = {
 void __init lpc31xx_gpiolib_init(void);
 
 
-static void __init ea313x_init(void)
+static void __init nb31xx_init(void)
 {
 	lpc313x_init();
 	
@@ -614,24 +652,26 @@ static void __init ea313x_init(void)
 	platform_add_devices(devices, ARRAY_SIZE(devices));
 
 	/* add DM9000 device */
-	ea_add_device_dm9000();
+	nb_add_device_dm9000();
 	
 	/* add Framebuffer device SSD1963 (where available...)*/
-	ea_add_device_ssd1963();
+	nb_add_device_ssd1963();
 	
 	/* add Framebuffer device TLS8301S (where available...)*/
-	ea_add_device_tls8301s();
+	nb_add_device_tls8301s();
 	
+	/* add Framebuffer device ILI9225 (where available...)*/
+	nb_add_device_ili9225();
 	
-	i2c_register_board_info(0, ea313x_i2c_devices,
-		ARRAY_SIZE(ea313x_i2c_devices));
+	i2c_register_board_info(0, nb31xx_i2c_devices,
+		ARRAY_SIZE(nb31xx_i2c_devices));
 
 }
 
-static void __init ea313x_map_io(void)
+static void __init nb31xx_map_io(void)
 {
 	lpc313x_map_io();
-	iotable_init(ea313x_io_desc, ARRAY_SIZE(ea313x_io_desc));
+	iotable_init(nb31xx_io_desc, ARRAY_SIZE(nb31xx_io_desc));
 }
 
 
@@ -646,10 +686,7 @@ static struct ads7846_platform_data lpc_ads7846_platform_data =
 {
 	.model = 7846, // The touch screen controller used is TSC2046 from 
 		       // Texas Instruments = (TSC2046 is just newer ads7846 silicon.
-			// .debounce_max = 1,
-			// .debounce_rep = 0,
-			// .debounce_tol = (~0),
-#if 1
+
 	.pressure_max = 1024,
 	.debounce_max=10,
 	.debounce_tol=3,
@@ -657,34 +694,16 @@ static struct ads7846_platform_data lpc_ads7846_platform_data =
 	.x_max = 3900, // 3858
 	.y_min = 190, // 258
 	.y_max = 3830, // 3587
-	
-#endif
-
-#if 0
-
-	.x_min = 300, //***MOD:JP: Measurments taken on small replacement (through ts_calibrate) 339
-	.x_max = 3900, // 3858
-	.y_min = 250, // 258
-	.y_max = 3600, // 3587
-#endif
-#if 0
-	.x_min = 150,
-	.x_max = 3830,
-	.y_min = 190,
-	.y_max = 3830,
-#endif
 	.x_plate_ohms = 450,
 	.y_plate_ohms = 250,
 	.vref_delay_usecs = 100,
-// .debounce_max = 10, // From LPC32xx
-// .debounce_tol = 3,
-// .pressure_max = 1024,
+
 	.get_pendown_state = ads7846_pendown_state,
 };
 
 static int __init lpc313x_spitouch_register(void)
 {
-#ifdef NBEE_TOUCH_SENSOR
+#ifdef CONFIG_NB31_ENABLETOUCH 
 
 
 	struct spi_board_info info =
@@ -705,18 +724,22 @@ static int __init lpc313x_spitouch_register(void)
 #endif
 }
 
+
 arch_initcall(lpc313x_spitouch_register);
 
+void lpc313x_vbus_power(int enable)
+{
+}
 
 
 
-MACHINE_START(EA313X, "NXP EA313X")
-	/* Maintainer: Durgesh Pattamatta, NXP */
+MACHINE_START(NB31, "NBEE NB31XX")
+	/* Maintainer: Miguel Angel Ajo Pelayo, NBEE Embedded Systems SL */
 	.phys_io	= IO_APB01_PHYS,
 	.io_pg_offst	= (io_p2v(IO_APB01_PHYS) >> 18) & 0xfffc,
 	.boot_params	= 0x30000100,
-	.map_io		= ea313x_map_io,
+	.map_io		= nb31xx_map_io,
 	.init_irq	= lpc313x_init_irq,
 	.timer		= &lpc313x_timer,
-	.init_machine	= ea313x_init,
+	.init_machine	= nb31xx_init,
 MACHINE_END

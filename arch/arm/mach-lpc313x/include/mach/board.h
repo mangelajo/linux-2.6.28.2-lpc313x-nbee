@@ -35,8 +35,6 @@ extern void __init lpc313x_init_irq(void);
 extern int __init lpc313x_init(void);
 extern int __init lpc313x_register_i2c_devices(void);
 extern void lpc313x_vbus_power(int enable);
-extern int lpc313x_entering_suspend_mem(void);
-
 
 struct sys_timer;
 extern struct sys_timer lpc313x_timer;
@@ -114,12 +112,7 @@ struct lpc313x_spi_cfg {
 	struct lpc313x_spics_cfg *spics_cfg;
 };
 
-#if defined (CONFIG_MACH_VAL3153) 
 #define MAX_MCI_SLOTS		2
-#else
-#define MAX_MCI_SLOTS		1
-#endif
-
 /*
  * the board-type specific routines
  */

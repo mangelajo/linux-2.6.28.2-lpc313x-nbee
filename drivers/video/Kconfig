@@ -2115,6 +2115,42 @@ config FB_PRE_INIT_FB
 	  Select this option if display contents should be inherited as set by
 	  the bootloader.
 
+config FB_SSD1963
+	tristate "Solomon Systech SSD1963 controller support"
+	depends on FB
+	select FB_SYS_FILLRECT
+	select FB_SYS_COPYAREA
+	select FB_SYS_IMAGEBLIT
+	select FB_SYS_FOPS
+	select FB_DEFERRED_IO
+	help
+	  This is a framebuffer device for the Solomon Systek SSD1963
+	  controller.
+
+config FB_TLS8301S
+	tristate "Terance Semiconductor, TLS8301S controller support"
+	depends on FB
+	select FB_SYS_FILLRECT
+	select FB_SYS_COPYAREA
+	select FB_SYS_IMAGEBLIT
+	select FB_SYS_FOPS
+	select FB_DEFERRED_IO
+	help
+	  This is a framebuffer device for the TLS8301S 176x220 TFT
+	  controller.
+
+config FB_ILI9225
+	tristate "ILI9225/ILI9226 controller support"
+	depends on FB
+	select FB_SYS_FILLRECT
+	select FB_SYS_COPYAREA
+	select FB_SYS_IMAGEBLIT
+	select FB_SYS_FOPS
+	select FB_DEFERRED_IO
+	help
+	  This is a framebuffer device for the ILI9225/ILI9226 176x220 TFT
+	  controller.
+
 source "drivers/video/omap/Kconfig"
 
 source "drivers/video/backlight/Kconfig"

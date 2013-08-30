@@ -74,7 +74,7 @@ int lpc313x_gpio_direction_output(unsigned gpio, int value)
 EXPORT_SYMBOL(lpc313x_gpio_direction_output);
 
 
-
+/*
 int gpio_is_valid(unsigned gpio)
 {
 	int ret = 1;
@@ -130,6 +130,33 @@ int gpio_is_valid(unsigned gpio)
 	return ret;
 }
 
-EXPORT_SYMBOL(gpio_is_valid);
+*/
+/*
+int gpio_direction_input(unsigned gpio)
+{
+	return lpc313x_gpio_direction_input(gpio);
+}
 
+int gpio_direction_output(unsigned gpio, int value)
+{
+	lpc313x_gpio_set_value(gpio, value);
+	return 0;
+}
+
+
+int gpio_request(unsigned gpio, const char *label)
+{
+	return 0;
+}
+
+void gpio_free( unsigned pin)
+{
+}
+*/
+/*
+EXPORT_SYMBOL(gpio_direction_input);
+EXPORT_SYMBOL(gpio_direction_output);
+EXPORT_SYMBOL(gpio_request);
+EXPORT_SYMBOL(gpio_is_valid);
+*/
 

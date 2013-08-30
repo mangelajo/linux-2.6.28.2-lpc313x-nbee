@@ -104,6 +104,7 @@ static int uda1380_write(struct snd_soc_codec *codec, unsigned int reg,
 		return 0;
 	pr_debug("uda1380: hw write %x val %x\n", reg, value);
 	if (codec->hw_write(codec->control_data, data, 3) == 3) {
+#if 0 // FIXME LPC313x temporary workaround, this read causes I2C SDA to stay low, CODEC read failures
 		unsigned int val;
 		i2c_master_send(codec->control_data, data, 1);
 		i2c_master_recv(codec->control_data, data, 2);
@@ -113,6 +114,7 @@ static int uda1380_write(struct snd_soc_codec *codec, unsigned int reg,
 					(data[0]<<8) | data[1]);
 			return -EIO;
 		}
+#endif
 		return 0;
 	} else
 		return -EIO;

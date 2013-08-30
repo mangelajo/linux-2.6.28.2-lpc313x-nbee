@@ -42,21 +42,6 @@ config USB_EHCI_HCD
 	  To compile this driver as a module, choose M here: the
 	  module will be called ehci-hcd.
 
-config USB_EHCI_EHSET
-	bool "Embedded High-speed Host Electrical Test Support (EXPERIMENTAL)"
-	depends on USB_EHCI_HCD && EXPERIMENTAL
-	---help---
-	  This option is only used if you are developing firmware for
-	  an embedded device with a Hi-speed USB Host or OTG port.
-
-	  If you say Y here, software support for the Embedded High-speed
-	  Host Electrical Tests will be added to the EHCI driver. This is
-	  one of the tests performed during High-speed USB Host certification
-	  testing.
-
-	  If you are at all unsure then say N here.
-
-
 config USB_EHCI_ROOT_HUB_TT
 	bool "Root Hub Transaction Translators"
 	depends on USB_EHCI_HCD

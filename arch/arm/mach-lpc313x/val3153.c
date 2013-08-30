@@ -27,7 +27,6 @@
 #include <linux/irq.h>
 #include <linux/interrupt.h>
 #include <linux/spi/spi.h>
-#include <linux/delay.h>
 #include <asm/system.h>
 
 #include <mach/hardware.h>
@@ -170,12 +169,9 @@ static struct lpc313x_nand_cfg val3153_plat_nand = {
 	.support_16bit	= 0,
 };
 
-static u64 nand_dmamask = 0xffffffffUL;
 static struct platform_device	lpc313x_nand_device = {
 	.name		= "lpc313x_nand",
 	.dev		= {
-		.dma_mask		= &nand_dmamask,
-		.coherent_dma_mask	= 0xffffffff,
 				.platform_data	= &val3153_plat_nand,
 	},
 	.num_resources	= ARRAY_SIZE(lpc313x_nand_resources),
@@ -281,6 +277,15 @@ static struct platform_device	lpc313x_mci_device = {
 	.resource	= lpc313x_mci_resources,
 };
 
+static struct platform_device	lpc313x_nand_device = {
+	.name		= "lpc313x_nand",
+	.dev		= {
+				.platform_data	= &val3153_plat_nand,
+	},
+	.num_resources	= ARRAY_SIZE(lpc313x_nand_resources),
+	.resource	= lpc313x_nand_resources,
+};
+
 
 
 static struct platform_device *devices[] __initdata = {
@@ -365,11 +370,11 @@ static int mci_init(u32 slot_id, irq_handler_t irqhdlr, void *data)
 	int level = mci_get_cd(slot_id)?IRQ_TYPE_LEVEL_LOW:IRQ_TYPE_LEVEL_HIGH;
 
 	/* set slot_select, cd and wp pins as GPIO pins */
-	gpio_direction_input(GPIO_GPIO12);
-	gpio_direction_input(GPIO_GPIO13);
-	gpio_direction_input(GPIO_GPIO14);
-	gpio_direction_input(GPIO_GPIO15);
-	gpio_direction_input(GPIO_MI2STX_DATA0);
+	lpc31xx_gpio_direction_input(GPIO_GPIO12);
+	lpc31xx_gpio_direction_input(GPIO_GPIO13);
+	lpc31xx_gpio_direction_input(GPIO_GPIO14);
+	lpc31xx_gpio_direction_input(GPIO_GPIO15);
+	lpc31xx_gpio_direction_input(GPIO_MI2STX_DATA0);
 
 	/* set card detect irq info */
 	irq_data[slot_id].data = data;
@@ -380,22 +385,18 @@ static int mci_init(u32 slot_id, irq_handler_t irqhdlr, void *data)
 			level,
 			(slot_id)?"mmc-cd1":"mmc-cd0",
 			&irq_data[slot_id]);
-
-	/****temporary for PM testing */
-	enable_irq_wake(irq_data[0].irq);
-	enable_irq_wake(irq_data[1].irq);
 	return ret;
 
 }
 
 static int mci_get_ro(u32 slot_id)
 {
-	return gpio_get_value((slot_id)?GPIO_GPIO15:GPIO_GPIO14);
+	return lpc31xx_gpio_get_value((slot_id)?GPIO_GPIO15:GPIO_GPIO14);
 }
 
 static int mci_get_cd(u32 slot_id)
 {
-	return gpio_get_value((slot_id)?GPIO_GPIO13:GPIO_GPIO12);
+	return lpc31xx_gpio_get_value((slot_id)?GPIO_GPIO13:GPIO_GPIO12);
 }
 
 static int mci_get_ocr(u32 slot_id)
@@ -416,7 +417,7 @@ static void mci_exit(u32 slot_id)
 static void mci_select_slot(u32 slot_id)
 {
 	/* select slot 1 for anything other than 0*/
-	gpio_set_value(GPIO_MI2STX_DATA0, (slot_id)?1:0);
+	lpc31xx_gpio_set_value(GPIO_MI2STX_DATA0, (slot_id)?1:0);
 }
 static int mci_get_bus_wd(u32 slot_id)
 {
@@ -425,20 +426,18 @@ static int mci_get_bus_wd(u32 slot_id)
 
 void lpc313x_vbus_power(int enable)
 {
-	printk(KERN_INFO "%s VBUS power!!!\n", (enable)?"Enabling":"Disabling" );
 	if (enable) 
-		gpio_set_value(GPIO_GPIO18, 0);
+		lpc31xx_gpio_set_value(GPIO_GPIO18, 0);
 	else
-		gpio_set_value(GPIO_GPIO18, 1);
-
-	udelay(500);
-	udelay(500);
+		lpc31xx_gpio_set_value(GPIO_GPIO18, 1);
 }
 
+void __init lpc31xx_gpiolib_init(void);
 
 static void __init val3153_init(void)
 {
 	lpc313x_init();
+	lpc31xx_gpiolib_init();
 	platform_add_devices(devices, ARRAY_SIZE(devices));
 }
 

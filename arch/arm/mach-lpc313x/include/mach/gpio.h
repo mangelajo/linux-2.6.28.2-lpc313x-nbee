@@ -23,6 +23,7 @@
 #ifndef _LPC313X_GPIO_H
 
 #include <mach/hardware.h>
+#include <asm-generic/gpio.h>
 
 #define GPIO_PORT_MASK  0x0FE0
 #define GPIO_PIN_MASK   0x001F
@@ -157,21 +158,6 @@ static inline int lpc313x_gpio_direction_input(unsigned gpio)
 	return 0;
 }
 
-static inline int lpc313x_gpio_ip_driven(unsigned gpio)
-{
-	unsigned long flags;
-	int port = (gpio & GPIO_PORT_MASK);
-	int pin = 1 << (gpio & GPIO_PIN_MASK);
-
-	raw_local_irq_save(flags);
-
-	GPIO_M1_RESET(port) = pin; 
-	GPIO_M0_SET(port) = pin;
-
-	raw_local_irq_restore(flags);
-	return 0;
-}
-
 
 static inline int lpc313x_gpio_get_value(unsigned gpio)
 {
@@ -197,23 +183,17 @@ static inline void lpc313x_gpio_set_value(unsigned gpio, int value)
 	raw_local_irq_restore(flags);
 }
 
+#define lpc31xx_gpio_set_value lpc313x_gpio_set_value
+#define lpc31xx_gpio_get_value lpc313x_gpio_get_value
+#define lpc31xx_gpio_direction_input lpc313x_gpio_direction_input
 
 /*-------------------------------------------------------------------------*/
 
 /* Wrappers for "new style" GPIO calls. These calls LPC313x specific versions
  * to allow future extension of GPIO logic.
 */
-static inline  int gpio_direction_input(unsigned gpio)
-{
-	return lpc313x_gpio_direction_input(gpio);
-}
 
-static inline int gpio_direction_output(unsigned gpio, int value)
-{
-	lpc313x_gpio_set_value(gpio, value);
-	return 0;
-}
-
+/*
 static inline int gpio_get_value(unsigned gpio)
 {
 	return lpc313x_gpio_get_value(gpio);
@@ -223,19 +203,7 @@ static inline void gpio_set_value(unsigned gpio, int value)
 {
 	lpc313x_gpio_set_value(gpio, value);
 }
-static inline int gpio_request(unsigned gpio, const char *label)
-{
-	return 0;
-}
-/**
- * FIXME: It is assumed that freeing a gpio pin
- * will set it to the default mode. eh?
- **/
-static inline void gpio_free( unsigned gpio)
-{
-	lpc313x_gpio_ip_driven(gpio);
-}
-int gpio_is_valid(unsigned pin);
+*/
 
 
 #endif /*_LPC313X_GPIO_H*/

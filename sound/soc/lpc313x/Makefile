@@ -7,5 +7,7 @@ obj-$(CONFIG_SND_LPC313X_SOC_I2S) += snd-soc-lpc313x-i2s.o lpc313x-i2s-clocking.
 
 # LPC3XXX Machine Support
 snd-soc-lpc313x-uda1380-objs := lpc313x-uda1380.o
+snd-soc-lpc313x-fhs-analog1-objs := lpc313x-fhsanalog1.o
 
 obj-$(CONFIG_SND_LPC313X_SOC_I2S_UDA1380) += snd-soc-lpc313x-uda1380.o
+obj-$(CONFIG_SND_LPC313X_SOC_I2S_FHS_ANALOG1) += snd-soc-lpc313x-fhs-analog1.o

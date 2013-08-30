@@ -363,7 +363,7 @@ static int lpc313x_spi_dma_transfer(struct lpc313xspi *spidat, struct spi_transf
 			goto exit;
 		}
 
-		/* At least one of the DMA buffers are already mapped */
+                /* At least one of the DMA buffers are already mapped */
 		if (src == 0)
 		{
 			/* Use temporary buffer for TX */
@@ -535,7 +535,10 @@ static void lpc313x_work_one(struct lpc313xspi *spidat, struct spi_message *m)
 		   sizes to 4Kbytes. */
 		/***Fix from JPP ******/
 		/*if (tlen < (SPI_FIFO_DEPTH * wsize)) {*/
-		if (0) { //***MOD: Non-DMA SPI code broken -> possibly off-by-one bit error.
+		//if (0) { //***MOD: Non-DMA SPI code broken -> possibly off-by-one bit error.
+		#if 0
+		if (tlen < (SPI_FIFO_DEPTH * wsize)){
+		
 			if ((txbuf == NULL) && (rxbuf == NULL))
 			{
 				/* A PIO mode DMA transfer requires mapped
@@ -610,6 +613,7 @@ static void lpc313x_work_one(struct lpc313xspi *spidat, struct spi_message *m)
 			}
 		}
 		else {
+		#endif
 			/* DMA will be used for the transfer */
 			spin_unlock_irqrestore(&spidat->lock, flags);
 			status = lpc313x_spi_dma_transfer(spidat, t, bits_per_word,
@@ -617,7 +621,9 @@ static void lpc313x_work_one(struct lpc313xspi *spidat, struct spi_message *m)
 			spin_lock_irqsave(&spidat->lock, flags);
 			if (status < 0)
 				goto exit;
+		#if 0
 		}
+		#endif
 
 		m->actual_length += t->len;
 		if (t->delay_usecs)
@@ -680,7 +686,7 @@ static int lpc313x_spi_transfer(struct spi_device *spi, struct spi_message *m)
 {
 	struct spi_master *master = spi->master;
 	struct lpc313xspi *spidat = spi_master_get_devdata(master);
-	//struct device *controller = spi->master->dev.parent;
+	struct device *controller = spi->master->dev.parent;
 	struct spi_transfer *t;
 	unsigned long flags;
 
@@ -701,10 +707,10 @@ static int lpc313x_spi_transfer(struct spi_device *spi, struct spi_message *m)
 			return -EINVAL;
 		}
 
-		/*dev_dbg(controller,
+/*		dev_dbg(controller,
 			"  xfer %p: len %u tx %p/%08x rx %p/%08x DMAmapped=%d\n",
 			t, t->len, t->tx_buf, t->tx_dma,
-			t->rx_buf, t->rx_dma, m->is_dma_mapped); */   //***MOD-
+			t->rx_buf, t->rx_dma, m->is_dma_mapped);*/		//***MOD-
 	}
 
 	spin_lock_irqsave(&spidat->lock, flags);
@@ -762,6 +768,11 @@ static int __init lpc313x_spi_probe(struct platform_device *pdev)
 			ret = -ENODEV;
 			goto errout;
 		}
+		else
+		{
+			/* deassert at start */
+			spidat->psppcfg->spics_cfg[i].spi_cs_set(i,1);
+		}
 	}
 
 	/* Save ID for this device */
@@ -773,7 +784,7 @@ static int __init lpc313x_spi_probe(struct platform_device *pdev)
 	INIT_WORK(&spidat->work, lpc313x_work);
 	INIT_LIST_HEAD(&spidat->queue);
 	init_waitqueue_head(&spidat->waitq);
-	spidat->workqueue = create_singlethread_workqueue(dev_name(master->dev.parent));	//***MOD:Fix from JPP to compile to latest versions of Linux
+	spidat->workqueue = create_singlethread_workqueue(dev_name(master->dev.parent));	//***MOD:Fix from JPP to compile to latest versions of Linux	
 	if (!spidat->workqueue)
 	{
 		ret = -ENOMEM;
@@ -905,45 +916,9 @@ static int __devexit lpc313x_spi_remove(struct platform_device *pdev)
 	return 0;
 }
 
-/**
- * Suspend SPI by switching off the IP clocks
- **/
-static int lpc313x_spi_suspend(struct platform_device *pdev, pm_message_t state)
-{
-#ifdef CONFIG_PM
-	struct spi_master *master = spi_master_get(platform_get_drvdata(pdev));
-	struct lpc313xspi *spidat = spi_master_get_devdata(master);
-
-	/* Check if SPI is idle before we pull off the clock */
-	if (unlikely(!list_empty(&spidat->queue)))
-		return 0;
-
-	/* Pull the clocks off */
-	lpc313x_spi_clks_disen(spidat, 0);
-#endif
-	return 0;
-}
-
-/**
- * Resume SPI by switching on the IP clocks
- **/
-static int lpc313x_spi_resume(struct platform_device *pdev)
-{
-#ifdef CONFIG_PM
-	struct spi_master *master = spi_master_get(platform_get_drvdata(pdev));
-	struct lpc313xspi *spidat = spi_master_get_devdata(master);
-
-	/* Switch on the clocks */
-	lpc313x_spi_clks_disen(spidat, 1);
-#endif
-	return 0;
-}
-
 static struct platform_driver lpc313x_spi_driver = {
 	.probe		= lpc313x_spi_probe,
 	.remove		= __devexit_p(lpc313x_spi_remove),
-	.suspend    = lpc313x_spi_suspend,
-	.resume     = lpc313x_spi_resume,
 	.driver		= {
 		.name	= "spi_lpc313x",
 		.owner	= THIS_MODULE,

@@ -452,30 +452,6 @@ typedef enum
 **********************************************************************/
 #define CGU_INVALID_ID  0xFFFF
 
-/* Clocks which which need wake_en set. These are system clocks not
- * managed by individual drivers. All other clocks should be disabled
- * at startup.
- */
-#define CGU_WKE_CLKS_0_31   ( _BIT(CGU_SB_APB0_CLK_ID) | _BIT(CGU_SB_APB1_CLK_ID) | \
-                              _BIT(CGU_SB_APB2_CLK_ID) | _BIT(CGU_SB_APB3_CLK_ID) | _BIT(CGU_SB_APB4_CLK_ID) | \
-                              _BIT(CGU_SB_AHB2INTC_CLK_ID) | _BIT(CGU_SB_AHB0_CLK_ID) | \
-                              _BIT(CGU_SB_EBI_CLK_ID) | _BIT(CGU_SB_DMA_PCLK_ID) | _BIT(CGU_SB_DMA_CLK_GATED_ID) | \
-                              _BIT(CGU_SB_ARM926_CORE_CLK_ID) | _BIT(CGU_SB_ARM926_BUSIF_CLK_ID) | \
-                              _BIT(CGU_SB_ARM926_RETIME_CLK_ID) | _BIT(CGU_SB_ISRAM0_CLK_ID) | \
-                              _BIT(CGU_SB_ISRAM1_CLK_ID) | _BIT(CGU_SB_ISROM_CLK_ID) | \
-                              _BIT(CGU_SB_MPMC_CFG_CLK_ID) | _BIT(CGU_SB_MPMC_CFG_CLK2_ID) | _BIT(CGU_SB_MPMC_CFG_CLK3_ID) | \
-                              _BIT(CGU_SB_INTC_CLK_ID) | _BIT(CGU_SB_AHB2APB0_ASYNC_PCLK_ID) | \
-                              _BIT(CGU_SB_EVENT_ROUTER_PCLK_ID) /*| _BIT(CGU_SB_CLOCK_OUT_ID)*/)
-
-#define CGU_WKE_CLKS_32_63 ( _BIT(CGU_SB_IOCONF_PCLK_ID - 32) | _BIT(CGU_SB_CGU_PCLK_ID - 32) | \
-                             _BIT(CGU_SB_SYSCREG_PCLK_ID - 32) | \
-                             _BIT(CGU_SB_AHB2APB1_ASYNC_PCLK_ID - 32) | _BIT(CGU_SB_AHB2APB2_ASYNC_PCLK_ID - 32) | \
-                             _BIT(CGU_SB_AHB2APB3_ASYNC_PCLK_ID - 32) | _BIT(CGU_SB_TIMER0_PCLK_ID - 32) )
-
-
-#define CGU_WKE_CLKS_64_92 ( 0 )
-
-
 /***********************************************************************
 * CGU driver enumerations
 **********************************************************************/
@@ -485,8 +461,6 @@ typedef enum {CGU_HPLL0_ID, CGU_HPLL1_ID} CGU_HPLL_ID_T;
 /* CGU soft reset module ID enumerations */
 typedef enum
 {
-  APB0_RST_SOFT = 0,
-  AHB2APB0_PNRES_SOFT,
   APB1_RST_SOFT,
   AHB2APB1_PNRES_SOFT,
   APB2_RESETN_SOFT,
@@ -592,6 +566,9 @@ void cgu_clk_set_exten(CGU_CLOCK_ID_T clkid, u32 enable);
 /* frac divider config function */
 u32 cgu_fdiv_config(u32 fdId, CGU_FDIV_SETUP_T fdivCfg, u32 enable);
 
+/* frac divider reset function */
+u32 cgu_fdiv_reset(u32 fdId);
+
 /***********************************************************************
 * CGU driver inline (ANSI C99 based) functions
 **********************************************************************/
@@ -621,18 +598,5 @@ static inline void cgu_soft_reset_module(CGU_MOD_ID_T modId)
   CGU_CFG->resetn_soft[modId] = CGU_CONFIG_SOFT_RESET;
 }
 
-
-/***********************************************************************
-* Enable/Disable frequency input to the selected base
-**********************************************************************/
-static inline void cgu_endis_base_freq(CGU_DOMAIN_ID_T baseid, int en)
-{
-	/* Let us not disturb anything except STOP */
-	if (!en){
-		CGU_SB->base_scr[baseid] |= CGU_SB_SCR_STOP;
-	} else {
-		CGU_SB->base_scr[baseid] &= ~CGU_SB_SCR_STOP;
-	}
-}
 
 #endif /* LPC313X_CGU_DRIVER_H */

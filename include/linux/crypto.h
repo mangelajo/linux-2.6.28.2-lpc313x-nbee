@@ -944,6 +944,8 @@ static inline struct crypto_blkcipher *crypto_alloc_blkcipher(
 	type |= CRYPTO_ALG_TYPE_BLKCIPHER;
 	mask |= CRYPTO_ALG_TYPE_MASK;
 
+  printk("crypto_alloc_blkcipher(%s,%08x,%08x);\n",alg_name,type,mask);
+  
 	return __crypto_blkcipher_cast(crypto_alloc_base(alg_name, type, mask));
 }
 

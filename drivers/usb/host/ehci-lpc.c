@@ -12,11 +12,9 @@
  */
 
 #include <linux/platform_device.h>
-#include <linux/fsl_devices.h>
-#include <linux/usb/otg.h>
-#include <mach/board.h>
 
-static struct platform_driver ehci_lpc_driver;
+/*####temporary until full OTG handling is implemented########*/
+#include <mach/hardware.h>
 
 static int lpc_ehci_init(struct usb_hcd *hcd)
 {
@@ -26,26 +24,17 @@ static int lpc_ehci_init(struct usb_hcd *hcd)
 	ehci->caps = hcd->regs + 0x100;
 	ehci->regs = hcd->regs + 0x100
 		+ HC_LENGTH(ehci_readl(ehci, &ehci->caps->hc_capbase));
-	/* cache this readonly data; minimize chip reads */
 	ehci->hcs_params = ehci_readl(ehci, &ehci->caps->hcs_params);
 
-	/* data structure init */
-	retval = ehci_halt(ehci);
-	if (retval)
-		return retval;
+	hcd->has_tt = 1;
+	ehci_reset(ehci);
 
 	retval = ehci_init(hcd);
 	if (retval)
 		return retval;
 	
-	hcd->has_tt = 1;
-
 	ehci->sbrn = 0x20;
-	ehci_reset(ehci);
-
 	ehci_port_power(ehci, 0);
-	/* board vbus power */
-	//lpc313x_vbus_power(0);
 
 	return retval;
 }
@@ -76,35 +65,15 @@ static const struct hc_driver lpc_ehci_hc_driver = {
 
 static int lpc_ehci_probe(struct platform_device *pdev)
 {
-	struct fsl_usb2_platform_data *pdata;
 	struct usb_hcd *hcd;
 	const struct hc_driver *driver = &lpc_ehci_hc_driver;
 	struct resource *res;
 	int irq;
 	int retval;
+	u32 otg_stat;
 
 	if (usb_disabled())
 		return -ENODEV;
-
-	/* Need platform data for setup */
-	pdata = (struct fsl_usb2_platform_data *)pdev->dev.platform_data;
-	if (!pdata) {
-		dev_err(&pdev->dev,
-			"No platform data for %s.\n", dev_name(&pdev->dev));
-		return -ENODEV;
-	}
-
-	/*
-	 * This is a host mode driver, verify that we're supposed to be
-	 * in host mode.
-	 */
-	if (!((pdata->operating_mode == FSL_USB2_DR_HOST) ||
-	      (pdata->operating_mode == FSL_USB2_DR_OTG))) {
-		dev_err(&pdev->dev,
-			"Non Host Mode configured for %s. Wrong driver linked.\n",
-			dev_name(&pdev->dev));
-		return -ENODEV;
-	}
 
 	res = platform_get_resource(pdev, IORESOURCE_IRQ, 0);
 	if (!res) {
@@ -131,14 +100,14 @@ static int lpc_ehci_probe(struct platform_device *pdev)
 	}
 	hcd->rsrc_start = res->start;
 	hcd->rsrc_len = res->end - res->start + 1;
-/*	
+
 	if (!request_mem_region(hcd->rsrc_start, hcd->rsrc_len,
 				driver->description)) {
 		dev_dbg(&pdev->dev, "controller already in use\n");
 		retval = -EBUSY;
 		goto fail_request_resource;
 	}
-*/
+
 	hcd->regs = ioremap_nocache(hcd->rsrc_start, hcd->rsrc_len);
 	if (hcd->regs == NULL) {
 		dev_dbg(&pdev->dev, "error mapping memory\n");
@@ -149,36 +118,20 @@ static int lpc_ehci_probe(struct platform_device *pdev)
 	/* Set to Host mode */
 	writel(readl(hcd->regs + 0x1a8) | 0x3, (hcd->regs + 0x1a8));
 
+#if 0
+	/* power USB-host VBUS */
+	/* 1. check PC is not supplying vbus 
+	####temporary until full OTG handling is implemented########*/
+	otg_stat = readl(hcd->regs + 0x1a4);
+	if ( !(otg_stat & 0x800)) {
+		enable_vbus_power();
+	}
+#endif
 	
 	retval = usb_add_hcd(hcd, irq, IRQF_SHARED);
 	if (retval)
 		goto fail_add_hcd;
 
-#if defined(CONFIG_USB_OTG)
-	if (pdata->operating_mode == FSL_USB2_DR_OTG) {
-		struct ehci_hcd *ehci = hcd_to_ehci(hcd);
-
-		dbg("pdev=0x%p  hcd=0x%p  ehci=0x%p\n", pdev, hcd, ehci);
-
-		ehci->transceiver = otg_get_transceiver();
-
-		printk(KERN_INFO "ehci->transceiver=0x%p, driver=0x%p\n", (void*)ehci->transceiver, (void*)&ehci_lpc_driver);
-
-		if (ehci->transceiver) {
-			retval = otg_set_host(ehci->transceiver,
-					      &ehci_to_hcd(ehci)->self);
-			if (retval) {
-				if (ehci->transceiver)
-					otg_put_transceiver(ehci->transceiver);
-				goto fail_add_hcd;
-			}
-		} else {
-			printk(KERN_ERR "can't find transceiver\n");
-			retval = -ENODEV;
-			goto fail_add_hcd;
-		}
-	}
-#endif
 	return retval;
 
 fail_add_hcd:
@@ -195,14 +148,6 @@ fail_create_hcd:
 static int lpc_ehci_remove(struct platform_device *pdev)
 {
 	struct usb_hcd *hcd = platform_get_drvdata(pdev);
-#if defined(CONFIG_USB_OTG)
-	struct ehci_hcd *ehci = hcd_to_ehci(hcd);
-
-	if (ehci->transceiver) {
-		(void)otg_set_host(ehci->transceiver, 0);
-		otg_put_transceiver(ehci->transceiver);
-	}
-#endif
 
 	usb_remove_hcd(hcd);
 	iounmap(hcd->regs);
@@ -212,146 +157,12 @@ static int lpc_ehci_remove(struct platform_device *pdev)
 	return 0;
 }
 
-#ifdef CONFIG_USB_OTG
-volatile static struct ehci_regs usb_ehci_regs;
-
-/* suspend/resume, section 4.3 */
-
-/* These routines rely on the bus (pci, platform, etc)
- * to handle powerdown and wakeup, and currently also on
- * transceivers that don't need any software attention to set up
- * the right sort of wakeup.
- *
- * They're also used for turning on/off the port when doing OTG.
- */
-static int lpc_ehci_suspend(struct device *dev, pm_message_t state)
-{
-	struct platform_device *pdev = to_platform_device(dev);
-	struct usb_hcd *hcd = platform_get_drvdata(pdev);
-	struct ehci_hcd *ehci = hcd_to_ehci(hcd);
-	u32 cmd;
-
-	dev_dbg(dev, "%s pdev=0x%p  ehci=0x%p  hcd=0x%p\n",
-		 __FUNCTION__, pdev, ehci, hcd);
-	dev_dbg(dev, "%s ehci->regs=0x%p  hcd->regs=0x%p  hcd->state=%d\n",
-		 __FUNCTION__, ehci->regs, hcd->regs, hcd->state);
-
-	hcd->state = HC_STATE_SUSPENDED;
-	pdev->dev.power.power_state = PMSG_SUSPEND;
-
-	/* ignore non-host interrupts */
-	clear_bit(HCD_FLAG_HW_ACCESSIBLE, &hcd->flags);
-
-	cmd = ehci_readl(ehci, &ehci->regs->command);
-	cmd &= ~CMD_RUN;
-	ehci_writel(ehci, cmd, &ehci->regs->command);
-
-	memcpy((void *)&usb_ehci_regs, ehci->regs, sizeof(struct ehci_regs));
-	usb_ehci_regs.port_status[0] &=
-	    cpu_to_le32(~(PORT_PEC | PORT_OCC | PORT_CSC));
-
-	/* put the device in idele mode */
-	writel(0, (hcd->regs + 0x1a8));
-	/* board vbus power */
-	//lpc313x_vbus_power(0);
-
-	return 0;
-}
-
-static int lpc_ehci_resume(struct device *dev)
-{
-	struct platform_device *pdev = to_platform_device(dev);
-	struct usb_hcd *hcd = platform_get_drvdata(pdev);
-	struct ehci_hcd *ehci = hcd_to_ehci(hcd);
-	u32 tmp;
-
-	dbg("%s pdev=0x%p  pdata=0x%p  ehci=0x%p  hcd=0x%p\n",
-	    __FUNCTION__, pdev, pdata, ehci, hcd);
-
-	vdbg("%s ehci->regs=0x%p  hcd->regs=0x%p  usbmode=0x%x\n",
-	     __FUNCTION__, ehci->regs, hcd->regs, pdata->usbmode);
-
-	/* Set to Host mode */
-	writel(USBMODE_CM_HC, (hcd->regs + 0x1a8));
-
-	memcpy(ehci->regs, (void *)&usb_ehci_regs, sizeof(struct ehci_regs));
-
-	set_bit(HCD_FLAG_HW_ACCESSIBLE, &hcd->flags);
-	hcd->state = HC_STATE_RUNNING;
-	pdev->dev.power.power_state = PMSG_ON;
-
-	tmp = ehci_readl(ehci, &ehci->regs->command);
-	tmp |= CMD_RUN;
-	ehci_writel(ehci, tmp, &ehci->regs->command);
-
-	/* board vbus power */
-	//lpc313x_vbus_power(1);
-
-
-	usb_hcd_resume_root_hub(hcd);
-
-	return 0;
-}
-#endif				/* CONFIG_USB_OTG */
-/**
- * FIXME: This should get into a common header
- * currently declared in arch/arm/mach-lpc313x/usb.c
- **/
-#define USB_DEV_PORTSC1			__REG(USBOTG_PHYS + 0x184)
-#define USBPRTS_PLPSCD	_BIT(23)
-static int lpc313x_ehci_suspend(struct platform_device *pdev, pm_message_t state)
-{
-#ifdef CONFIG_PM
-	disable_irq(IRQ_VBUS_OVRC);
-	/* Shutoff vbus power */
-	lpc313x_vbus_power(0);
-	/* Bring PHY to low power state */
-	USB_DEV_PORTSC1 |= USBPRTS_PLPSCD;
-	/* Bring PLL to low power state */
-	SYS_USB_ATX_PLL_PD_REG = 0x1;
-	/* Shutoff IP Clock */
-	cgu_clk_en_dis(CGU_SB_USB_OTG_AHB_CLK_ID, 0);
-#endif
-	return 0;
-}
-
-static int lpc313x_ehci_resume(struct platform_device * pdev)
-{
-#ifdef CONFIG_PM
-	u32 bank = EVT_GET_BANK(EVT_usb_atx_pll_lock);
-	u32 bit_pos = EVT_usb_atx_pll_lock & 0x1F;
-	int tout = 100;
-
-	/* Turn on IP Clock */
-	cgu_clk_en_dis(CGU_SB_USB_OTG_AHB_CLK_ID, 1);
-	/* Bring PLL to low power state */
-	SYS_USB_ATX_PLL_PD_REG = 0x0;
-	/* wait for PLL to lock */
-	while (!(EVRT_RSR(bank) & _BIT(bit_pos))){
-		udelay(5);
-		if (!tout--)
-			break;
-	}
-	/* Bring PHY to active state */
-	USB_DEV_PORTSC1 &= ~USBPRTS_PLPSCD;
-	lpc313x_vbus_power(1);
-	enable_irq(IRQ_VBUS_OVRC);
-#endif
-	return 0;
-}
+MODULE_ALIAS("platform:lpc-ehci");
 
 static struct platform_driver ehci_lpc_driver = {
 	.probe = lpc_ehci_probe,
 	.remove = lpc_ehci_remove,
-	.suspend = lpc313x_ehci_suspend,
-	.resume = lpc313x_ehci_resume,
 	.driver = {
 		.name = "lpc-ehci",
-#ifdef CONFIG_USB_OTG
-		.suspend = lpc_ehci_suspend,
-		.resume  = lpc_ehci_resume,
-#endif
 	},
 };
-
-MODULE_ALIAS("platform:lpc-ehci");

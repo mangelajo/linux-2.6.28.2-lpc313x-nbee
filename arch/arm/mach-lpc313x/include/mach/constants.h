@@ -30,7 +30,6 @@
  * Physical bases
  **********************************************************************/
 #define EVTR_PHYS         (0x13000000)
-#define ADC_PHYS          (0x13002000)
 #define WDT_PHYS          (0x13002400)
 #define SYS_PHYS          (0x13002800)
 #define GPIO_PHYS         (0x13003000)
@@ -102,6 +101,3 @@
 /* NAND buffer address range*/
 #define IO_NAND_BUF_PHYS  (0x70000000)
 #define IO_NAND_BUF_SIZE  (0x00001000)
-/* ISRAM address range*/
-#define IO_ISRAM0_PHYS     (0x11028000)
-#define IO_ISRAM0_SIZE     (0x00018000)

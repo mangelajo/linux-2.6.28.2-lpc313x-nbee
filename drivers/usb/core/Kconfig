@@ -103,7 +103,7 @@ config USB_SUSPEND
 	  If you are unsure about this, say N here.
 
 config USB_OTG
-	bool "OTG Support"
+	bool
 	depends on USB && EXPERIMENTAL
 	select USB_SUSPEND
 	default n

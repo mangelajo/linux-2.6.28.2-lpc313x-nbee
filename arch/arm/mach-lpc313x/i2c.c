@@ -30,7 +30,6 @@
 #include <mach/hardware.h>
 #include <mach/i2c.h>
 #include <mach/gpio.h>
-#include <mach/irqs.h>
 
 #define LPC313x_I2C0_SLV_ADDR            __REG (I2C0_PHYS + 0x014)
 #define LPC313x_I2C1_SLV_ADDR            __REG (I2C1_PHYS + 0x014)
@@ -41,8 +40,8 @@ static int set_clock_run(struct platform_device *pdev)
 		cgu_clk_en_dis( CGU_SB_I2C0_PCLK_ID, 1);
 	else
 		cgu_clk_en_dis( CGU_SB_I2C1_PCLK_ID, 1);
-	
-	udelay(2);
+
+  udelay(2);
 	return 0;
 }
 
@@ -145,16 +144,11 @@ void __init lpc313x_register_i2c_devices(void)
 
 	/* Enable I2C1 signals */
 	GPIO_DRV_IP(IOCONF_I2C1, 0x3);
+	
+	/* setup the default slave address for I2C to avoid bus problems */
+  LPC313x_I2C0_SLV_ADDR = 0x06E;
+  LPC313x_I2C1_SLV_ADDR = 0x06E;
 
-#if defined (CONFIG_MACH_VAL3153) || defined (CONFIG_MACH_EA313X)
-	/* on EA and VAL boards UDA1380 is connected to I2C1
-	 * whose slave address is same as LPC313x's default slave
-	 * adress causing bus contention errors. So change the 
-	 * deafult slave address register value of LPC313x here.
-	 */
-	LPC313x_I2C0_SLV_ADDR = 0x06E;
-	LPC313x_I2C1_SLV_ADDR = 0x06E;
-#endif
 
 	platform_add_devices(devices, ARRAY_SIZE(devices));
 }

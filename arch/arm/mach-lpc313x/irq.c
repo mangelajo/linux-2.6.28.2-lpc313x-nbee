@@ -29,8 +29,6 @@
 #include <asm/irq.h>
 #include <asm/mach/irq.h>
 #include <mach/irqs.h>
-#include <mach/cgu.h>
-
 
 static IRQ_EVENT_MAP_T irq_2_event[] = BOARD_IRQ_EVENT_MAP;
 
@@ -44,71 +42,40 @@ static void intc_unmask_irq(unsigned int irq)
 	INTC_REQ_REG(irq) = INTC_REQ_ENABLE | INTC_REQ_WE_ENABLE;
 }
 
-static int intc_set_wake(unsigned irq, unsigned value)
-{
-	static u32 wake_ints = 0;
-
-	if (value)
-		/* save the irqs which wake */
-		wake_ints |= _BIT(irq);
-	else
-		/* clear the irqs which don't wake */
-		wake_ints &= ~_BIT(irq);
-
-	/* Note: the clocks to corresponding blocks shouldn't be suspended
-	 * by individual drivers for this logic to work.
-	 */
-	if (wake_ints) {
-		/* enable ARM_IRQ routing to CGU_WAKEUP */
-		EVRT_OUT_MASK_SET(4, EVT_GET_BANK(EVT_arm926_nirq)) = _BIT((EVT_arm926_nirq & 0x1F));
-	} else {
-		/* disable ARM_IRQ routing to CGU_WAKEUP */
-		EVRT_OUT_MASK_CLR(4, EVT_GET_BANK(EVT_arm926_nirq)) = _BIT((EVT_arm926_nirq & 0x1F));
-	}
-
-	//printk("wake on irq=%d value=%d 0x%08x/0x%08x/0x%08x 0x%08x/0x%08x\r\n", irq, value, 
-	//	EVRT_MASK(3), EVRT_APR(3), EVRT_ATR(3),
-	//	EVRT_OUT_MASK(4,3), EVRT_OUT_PEND(4,3));
-
-	return 0;
-}
-
 static struct irq_chip lpc313x_internal_chip = {
 	.name = "INTC",
 	.ack = intc_mask_irq,
 	.mask = intc_mask_irq,
 	.unmask = intc_unmask_irq,
-	.set_wake = intc_set_wake,
 };
 
 static void evt_mask_irq(unsigned int irq)
 {
-	u32 bank = EVT_GET_BANK(irq_2_event[irq - IRQ_EVT_START].event_pin);
-	u32 bit_pos = irq_2_event[irq - IRQ_EVT_START].event_pin & 0x1F;
+	u32 bank = EVT_GET_BANK(irq_2_event[irq - IRQ_BOARD_START].event_pin);
+	u32 bit_pos = irq_2_event[irq - IRQ_BOARD_START].event_pin & 0x1F;
 
 	EVRT_MASK_CLR(bank) = _BIT(bit_pos);
 }
 
 static void evt_unmask_irq(unsigned int irq)
 {
-	u32 bank = EVT_GET_BANK(irq_2_event[irq - IRQ_EVT_START].event_pin);
-	u32 bit_pos = irq_2_event[irq - IRQ_EVT_START].event_pin & 0x1F;
+	u32 bank = EVT_GET_BANK(irq_2_event[irq - IRQ_BOARD_START].event_pin);
+	u32 bit_pos = irq_2_event[irq - IRQ_BOARD_START].event_pin & 0x1F;
 
 	EVRT_MASK_SET(bank) = _BIT(bit_pos);
 }
 
 static void evt_ack_irq(unsigned int irq)
 {
-	u32 bank = EVT_GET_BANK(irq_2_event[irq - IRQ_EVT_START].event_pin);
-	u32 bit_pos = irq_2_event[irq - IRQ_EVT_START].event_pin & 0x1F;
-	//EVRT_MASK_CLR(bank) = _BIT(bit_pos);
+	u32 bank = EVT_GET_BANK(irq_2_event[irq - IRQ_BOARD_START].event_pin);
+	u32 bit_pos = irq_2_event[irq - IRQ_BOARD_START].event_pin & 0x1F;
 	EVRT_INT_CLR(bank) = _BIT(bit_pos);
 }
 
 static int evt_set_type(unsigned irq, unsigned type)
 {
-	u32 bank = EVT_GET_BANK(irq_2_event[irq - IRQ_EVT_START].event_pin);
-	u32 bit_pos = irq_2_event[irq - IRQ_EVT_START].event_pin & 0x1F;
+	u32 bank = EVT_GET_BANK(irq_2_event[irq - IRQ_BOARD_START].event_pin);
+	u32 bit_pos = irq_2_event[irq - IRQ_BOARD_START].event_pin & 0x1F;
 
 	switch (type) {
 	case IRQ_TYPE_EDGE_RISING:
@@ -137,29 +104,12 @@ static int evt_set_type(unsigned irq, unsigned type)
 	return 0;
 }
 
-static int evt_set_wake(unsigned irq, unsigned value)
-{
-	u32 bank = EVT_GET_BANK(irq_2_event[irq - IRQ_EVT_START].event_pin);
-	u32 bit_pos = irq_2_event[irq - IRQ_EVT_START].event_pin & 0x1F;
-
-	if (value)
-		/* enable routing to CGU_WAKEUP */
-		EVRT_OUT_MASK_SET(4, bank) = _BIT(bit_pos);
-	else
-		/* disable routing to CGU_WAKEUP */
-		EVRT_OUT_MASK_CLR(4, bank) = _BIT(bit_pos);
-
-	return 0;
-}
-
-
 static struct irq_chip lpc313x_evtr_chip = {
 	.name = "EVENTROUTER",
 	.ack = evt_ack_irq,
 	.mask = evt_mask_irq,
 	.unmask = evt_unmask_irq,
 	.set_type = evt_set_type,
-	.set_wake = evt_set_wake,
 };
 
 
@@ -173,8 +123,8 @@ static struct irq_chip lpc313x_evtr_chip = {
 		} else { \
 			for (irq = IRQ_EVTR##n##_START; irq <= IRQ_EVTR##n##_END; irq++) {  \
 				/* compute bank & bit position for the event_pin */ \
-				bank = EVT_GET_BANK(irq_2_event[irq - IRQ_EVT_START].event_pin); \
-				bit_pos = irq_2_event[irq - IRQ_EVT_START].event_pin & 0x1F; \
+				bank = EVT_GET_BANK(irq_2_event[irq - IRQ_BOARD_START].event_pin); \
+				bit_pos = irq_2_event[irq - IRQ_BOARD_START].event_pin & 0x1F; \
 				status = EVRT_OUT_PEND(n, bank); \
 				if (status & _BIT(bit_pos)) \
 					generic_handle_irq(irq); \
@@ -255,19 +205,19 @@ void __init lpc313x_init_irq(void)
 	}
 
 	/* Now configure external/board interrupts using event router */
-	for (irq = IRQ_EVT_START; irq < NR_IRQS; irq++) {
+	for (irq = IRQ_BOARD_START; irq < NR_IRQS; irq++) {
 		/* compute bank & bit position for the event_pin */
-		bank = EVT_GET_BANK(irq_2_event[irq - IRQ_EVT_START].event_pin);
-		bit_pos = irq_2_event[irq - IRQ_EVT_START].event_pin & 0x1F;
+		bank = EVT_GET_BANK(irq_2_event[irq - IRQ_BOARD_START].event_pin);
+		bit_pos = irq_2_event[irq - IRQ_BOARD_START].event_pin & 0x1F;
 		
 		printk("irq=%d Event=0x%x bank:%d bit:%d type:%d\r\n", irq,
-			irq_2_event[irq - IRQ_EVT_START].event_pin, bank,
-			bit_pos, irq_2_event[irq - IRQ_EVT_START].type);
+			irq_2_event[irq - IRQ_BOARD_START].event_pin, bank,
+			bit_pos, irq_2_event[irq - IRQ_BOARD_START].type);
 
 		set_irq_chip(irq, &lpc313x_evtr_chip);
 		set_irq_flags(irq, IRQF_VALID);
 		/* configure the interrupt senstivity */
-		switch (irq_2_event[irq - IRQ_EVT_START].type) {
+		switch (irq_2_event[irq - IRQ_BOARD_START].type) {
 			case EVT_ACTIVE_LOW:
 				EVRT_APR(bank) &= ~_BIT(bit_pos);
 				EVRT_ATR(bank) &= ~_BIT(bit_pos);
@@ -311,11 +261,6 @@ void __init lpc313x_init_irq(void)
 			printk("Invalid Event router setup.\r\n");
 		}
 	}
-	/* for power management. Wake from internal irqs */
-	EVRT_APR(3) &= ~_BIT(12);
-	EVRT_ATR(3) &= ~_BIT(12);
-	EVRT_MASK_SET(3) = _BIT(12);
-
 	/* install IRQ_EVT_ROUTER0  chain handler */
 #if IRQ_EVTR0_END
 	/* install chain handler for IRQ_EVT_ROUTER0 */

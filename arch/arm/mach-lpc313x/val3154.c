@@ -221,7 +221,7 @@ static int mci_init(u32 slot_id, irq_handler_t irqhdlr, void *data)
 	int level = mci_get_cd(0)?IRQ_TYPE_LEVEL_LOW:IRQ_TYPE_LEVEL_HIGH;
 
 	/* set slot_select, cd and wp pins as GPIO pins */
-	gpio_direction_input(GPIO_MI2STX_BCK0);
+	lpc31xx_gpio_direction_input(GPIO_MI2STX_BCK0);
 
 	/* set card detect irq info */
 	irq_data.data = data;
@@ -243,7 +243,7 @@ static int mci_get_ro(u32 slot_id)
 
 static int mci_get_cd(u32 slot_id)
 {
-	return gpio_get_value(GPIO_MI2STX_BCK0);
+	return lpc31xx_gpio_get_value(GPIO_MI2STX_BCK0);
 }
 
 static int mci_get_ocr(u32 slot_id)
@@ -253,7 +253,7 @@ static int mci_get_ocr(u32 slot_id)
 
 static void mci_setpower(u32 slot_id, u32 volt)
 {
-	gpio_set_value(GPIO_MI2STX_DATA0, 0);
+	lpc31xx_gpio_set_value(GPIO_MI2STX_DATA0, 0);
 }
 static int mci_get_bus_wd(u32 slot_id)
 {
@@ -268,14 +268,21 @@ static void mci_exit(u32 slot_id)
 void lpc313x_vbus_power(int enable)
 {
 	if (enable) 
-		gpio_set_value(GPIO_I2SRX_DATA0, 1);
+		lpc31xx_gpio_set_value(GPIO_I2SRX_DATA0, 1);
 	else
-		gpio_set_value(GPIO_I2SRX_DATA0, 0);
+		lpc31xx_gpio_set_value(GPIO_I2SRX_DATA0, 0);
 }
+
+void __init lpc31xx_gpiolib_init(void);
+	
 
 static void __init val3154_init(void)
 {
 	lpc313x_init();
+
+	/* register GPIOLIB gpios */
+	lpc31xx_gpiolib_init();
+
 	/* register i2cdevices */
 	lpc313x_register_i2c_devices();
 	

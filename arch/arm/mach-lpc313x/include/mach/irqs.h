@@ -58,65 +58,42 @@
 
 
 # define NR_IRQ_CPU	  30	/* IRQs directly recognized by CPU */
+#define IRQ_BOARD_START   NR_IRQ_CPU
 
-#define IRQ_EVT_START   NR_IRQ_CPU
 
-/* System specific IRQs */
+  /* System specific IRQs */
 #include "event_router.h"
 
-/* Other chip IRQs routed through event router.
- * These IRQs should be treated as board IRQs but they are
- * common for all boards.
- */
-#define IRQ_WDT        30  /* Watchdog interrupt */
-#define IRQ_VBUS_EN    31  /* VBUS power enable */
-#define IRQ_VBUS_OVRC  32  /* Detect VBUS over current - Host mode */
-#define IRQ_USB_ID     33  /* Detect ID pin change - OTG */
+#if defined (CONFIG_MACH_FHS3143)
+#define IRQ_SDMMC_CD	        (IRQ_BOARD_START + 0)	/* SD card detect */
+#define IRQ_Touch_PenDown 	  (IRQ_BOARD_START + 1) /* Touchscreen pen down */
 
-#define _INTERNAL_IRQ_EVENT_MAP	\
-	{IRQ_WDT, EVT_wdog_m0, EVT_RISING_EDGE}, \
-	{IRQ_VBUS_EN, EVT_usb_otg_vbus_pwr_en, EVT_FALLING_EDGE}, \
-	{IRQ_VBUS_OVRC, EVT_USB_VBUS, EVT_FALLING_EDGE}, \
-	{IRQ_USB_ID, EVT_USB_ID, EVT_ACTIVE_LOW}, \
+#define NR_IRQ_BOARD		2
 
-#if defined(CONFIG_LPC3152_AD)
-/* For chips with analog die there are some more AD events routed
- * through event router.
- */
-#define IRQ_RTC	        34
-#define IRQ_PLAY        35
-#define NR_IRQ_CHIP_EVT	6
-
-#define AD_IRQ_EVENT_MAP	\
-	{IRQ_RTC, EVT_AD_NINT_I, EVT_ACTIVE_LOW}, \
-	{IRQ_PLAY, EVT_PLAY_DET_I, EVT_ACTIVE_HIGH}, \
-
-#define CHIP_IRQ_EVENT_MAP   _INTERNAL_IRQ_EVENT_MAP \
-	AD_IRQ_EVENT_MAP 
-
-#else
-#define CHIP_IRQ_EVENT_MAP   _INTERNAL_IRQ_EVENT_MAP
-#define NR_IRQ_CHIP_EVT	     4
-#endif
-
-/* now compute the board start IRQ number */
-#define IRQ_BOARD_START   (NR_IRQ_CPU + NR_IRQ_CHIP_EVT)
-
-/* Route all internal chip events to IRQ_EVT_ROUTER0 */
-#define IRQ_EVTR0_START        IRQ_EVT_START
-#define IRQ_EVTR0_END          (IRQ_BOARD_START - 1)
+#define BOARD_IRQ_EVENT_MAP	{ \
+	{IRQ_SDMMC_CD, EVT_mI2STX_BCK0, EVT_ACTIVE_HIGH}, \
+  {IRQ_Touch_PenDown, EVT_GPIO17, EVT_FALLING_EDGE},  \
+	}
 
 
-#if defined (CONFIG_MACH_VAL3153) 
+#define IRQ_EVTR0_START        IRQ_SDMMC_CD
+#define IRQ_EVTR0_END          IRQ_SDMMC_CD
+#define IRQ_EVTR1_START        0
+#define IRQ_EVTR1_END          0
+#define IRQ_EVTR2_START        IRQ_Touch_PenDown
+#define IRQ_EVTR2_END          IRQ_Touch_PenDown
+#define IRQ_EVTR3_START        0
+#define IRQ_EVTR3_END          0
 
-# define IRQ_CS8900_ETH_INT  IRQ_BOARD_START	/* Ethernet chip */
-# define IRQ_SDMMC_CD0       (IRQ_BOARD_START + 1)	/* SD card detect */
-# define IRQ_SDMMC_CD1       (IRQ_BOARD_START + 2)	/* SD card detect */
-# define NR_IRQ_BOARD        3
+#elif defined (CONFIG_MACH_VAL3153) 
+
+# define IRQ_CS8900_ETH_INT	IRQ_BOARD_START	/* Ethernet chip */
+# define IRQ_SDMMC_CD0	        (IRQ_BOARD_START + 1)	/* SD card detect */
+# define IRQ_SDMMC_CD1	        (IRQ_BOARD_START + 2)	/* SD card detect */
+# define NR_IRQ_BOARD		3
 
 /* now define board irq to event pin map */
 #define BOARD_IRQ_EVENT_MAP	{ \
-	CHIP_IRQ_EVENT_MAP \
 	{IRQ_CS8900_ETH_INT, EVT_GPIO16, EVT_ACTIVE_HIGH}, \
 	{IRQ_SDMMC_CD0, EVT_GPIO12, EVT_ACTIVE_HIGH}, \
 	{IRQ_SDMMC_CD1, EVT_GPIO13, EVT_ACTIVE_HIGH}, \
@@ -125,53 +102,104 @@
    IRQ_EVT_ROUTERx IRQ is generated when event in the corresponding 
    group triggers.
 */
-#define IRQ_EVTR1_START        IRQ_CS8900_ETH_INT
-#define IRQ_EVTR1_END          IRQ_CS8900_ETH_INT
-#define IRQ_EVTR2_START        IRQ_SDMMC_CD0
-#define IRQ_EVTR2_END          IRQ_SDMMC_CD0
-#define IRQ_EVTR3_START        IRQ_SDMMC_CD1
-#define IRQ_EVTR3_END          IRQ_SDMMC_CD1
+#define IRQ_EVTR0_START        IRQ_CS8900_ETH_INT
+#define IRQ_EVTR0_END          IRQ_CS8900_ETH_INT
+#define IRQ_EVTR1_START        IRQ_SDMMC_CD0
+#define IRQ_EVTR1_END          IRQ_SDMMC_CD0
+#define IRQ_EVTR2_START        IRQ_SDMMC_CD1
+#define IRQ_EVTR2_END          IRQ_SDMMC_CD1
+#define IRQ_EVTR3_START        0
+#define IRQ_EVTR3_END          0
 
 
-#elif defined (CONFIG_MACH_EA313X) || defined(CONFIG_MACH_EA3152)
-# define IRQ_DM9000_ETH_INT   IRQ_BOARD_START	/* Ethernet chip */
-# define IRQ_SDMMC_CD         (IRQ_BOARD_START + 1)	/* SD card detect */
-# define IRQ_EA_VBUS_OVRC     (IRQ_BOARD_START + 2)	/* Over current indicator */
-# define NR_IRQ_BOARD         3
+#elif defined (CONFIG_MACH_EA313X)
+# define IRQ_DM9000_ETH_INT	IRQ_BOARD_START	/* Ethernet chip */
+# define IRQ_SDMMC_CD	        (IRQ_BOARD_START + 1)	/* SD card detect */
+# define IRQ_Touch_PenDown 	(IRQ_BOARD_START + 2) /* Touchscreen pen down */
+# define NR_IRQ_BOARD		3
 
 /* now define board irq to event pin map */
 #define BOARD_IRQ_EVENT_MAP	{ \
-	CHIP_IRQ_EVENT_MAP \
 	{IRQ_DM9000_ETH_INT, EVT_mNAND_RYBN3, EVT_ACTIVE_HIGH}, \
 	{IRQ_SDMMC_CD, EVT_mI2STX_BCK0, EVT_ACTIVE_LOW}, \
-	{IRQ_EA_VBUS_OVRC, EVT_I2SRX_WS0, EVT_ACTIVE_LOW}, \
+	{IRQ_Touch_PenDown, EVT_GPIO4, EVT_FALLING_EDGE},  \
 	}
 /* Following defines group the board IRQs into 4 IRQ_EVNTR groups.
    IRQ_EVT_ROUTERx IRQ is generated when event in the corresponding 
    group triggers.
 */
-#define IRQ_EVTR1_START        IRQ_DM9000_ETH_INT
-#define IRQ_EVTR1_END          IRQ_DM9000_ETH_INT
-#define IRQ_EVTR2_START        IRQ_SDMMC_CD
-#define IRQ_EVTR2_END          IRQ_SDMMC_CD
-#define IRQ_EVTR3_START        IRQ_EA_VBUS_OVRC
-#define IRQ_EVTR3_END          IRQ_EA_VBUS_OVRC
+#define IRQ_EVTR0_START        IRQ_DM9000_ETH_INT
+#define IRQ_EVTR0_END          IRQ_DM9000_ETH_INT
+#define IRQ_EVTR1_START        IRQ_SDMMC_CD
+#define IRQ_EVTR1_END          IRQ_SDMMC_CD
+#define IRQ_EVTR2_START IRQ_Touch_PenDown 
+#define IRQ_EVTR2_END IRQ_Touch_PenDown
+#define IRQ_EVTR3_START 0
+#define IRQ_EVTR3_END 0
+
+#elif defined (CONFIG_MACH_NB31)
+
+	#define IRQ_DM9000_ETH_INT	IRQ_BOARD_START	/* Ethernet chip */
+	#define IRQ_SDMMC_CD	        (IRQ_BOARD_START + 1)	/* SD card detect */
+#ifdef CONFIG_NB31_ENABLETOUCH
+	#define IRQ_Touch_PenDown 	(IRQ_BOARD_START + 2) /* Touchscreen pen down */
+	#define NR_IRQ_BOARD	 3
+#else
+	#define NR_IRQ_BOARD     2
+#endif
+	
+	
+	/* now define board irq to event pin map */
+
+#ifndef CONFIG_NB31_ENABLETOUCH		
+	#define BOARD_IRQ_EVENT_MAP	{ \
+		{IRQ_DM9000_ETH_INT, EVT_mNAND_RYBN3, EVT_ACTIVE_HIGH}, \
+		{IRQ_SDMMC_CD, EVT_mI2STX_BCK0, EVT_ACTIVE_LOW}, \
+		}
+#else
+	#define BOARD_IRQ_EVENT_MAP	{ \
+		{IRQ_DM9000_ETH_INT, EVT_mNAND_RYBN3, EVT_ACTIVE_HIGH}, \
+		{IRQ_SDMMC_CD, EVT_mI2STX_BCK0, EVT_ACTIVE_LOW}, \
+		{IRQ_Touch_PenDown, EVT_GPIO4, EVT_FALLING_EDGE}, \
+		}
+#endif		
+	/* Following defines group the board IRQs into 4 IRQ_EVNTR groups.
+	   IRQ_EVT_ROUTERx IRQ is generated when event in the corresponding 
+	   group triggers.
+	*/
+	#define IRQ_EVTR0_START        IRQ_DM9000_ETH_INT
+	#define IRQ_EVTR0_END          IRQ_DM9000_ETH_INT
+	#define IRQ_EVTR1_START        IRQ_SDMMC_CD
+	#define IRQ_EVTR1_END          IRQ_SDMMC_CD
+#ifdef CONFIG_NB31_ENABLETOUCH
+	#define IRQ_EVTR2_START 		 	IRQ_Touch_PenDown	
+	#define IRQ_EVTR2_END 			  	IRQ_Touch_PenDown	
+#else
+	#define IRQ_EVTR2_START 			0
+	#define IRQ_EVTR2_END 				0
+#endif
+	#define IRQ_EVTR3_START 			0
+	#define IRQ_EVTR3_END 				0
+
+
 
 #elif defined (CONFIG_MACH_VAL3154)
-# define IRQ_SDMMC_CD	 IRQ_BOARD_START 	/* SD card detect */
-# define NR_IRQ_BOARD	 1
+# define IRQ_SDMMC_CD	        IRQ_BOARD_START 	/* SD card detect */
+# define IRQ_SDMMC_CD	        IRQ_BOARD_START 	/* SD card detect */
+# define NR_IRQ_BOARD		1
 
 /* now define board irq to event pin map */
 #define BOARD_IRQ_EVENT_MAP	{ \
-	CHIP_IRQ_EVENT_MAP \
 	{IRQ_SDMMC_CD, EVT_mI2STX_BCK0, EVT_ACTIVE_LOW}, \
 	}
 /* Following defines group the board IRQs into 4 IRQ_EVNTR groups.
    IRQ_EVT_ROUTERx IRQ is generated when event in the corresponding 
    group triggers.
 */
-#define IRQ_EVTR1_START        IRQ_SDMMC_CD
-#define IRQ_EVTR1_END          IRQ_SDMMC_CD
+#define IRQ_EVTR0_START        IRQ_SDMMC_CD
+#define IRQ_EVTR0_END          IRQ_SDMMC_CD
+#define IRQ_EVTR1_START        0
+#define IRQ_EVTR1_END          0
 #define IRQ_EVTR2_START        0
 #define IRQ_EVTR2_END          0
 #define IRQ_EVTR3_START        0
@@ -191,6 +219,6 @@
 #endif
 
 
-#define NR_IRQS		(NR_IRQ_CPU + NR_IRQ_CHIP_EVT + NR_IRQ_BOARD)
+#define NR_IRQS		(NR_IRQ_CPU + NR_IRQ_BOARD)
 
 #endif
